@@ -1,0 +1,13 @@
+{
+  "name": "othello-example",
+  "window": { "width": 680, "height": 740, "title": "Othello", "titlebar": false },
+  "icon": "app-icon.ico",
+  "bundle": {
+    "entry": "index.tsx",
+    "outDir": "dist",
+    "build": { "command": "pnpm", "args": ["build"] }
+  },
+  "dev": {
+    "build": { "command": "pnpm", "args": ["dev"] }
+  }
+}

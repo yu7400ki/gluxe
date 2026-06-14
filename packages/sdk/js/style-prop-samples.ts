@@ -1,0 +1,108 @@
+import type { BaseStyleProps } from "./primitives";
+
+/**
+ * One JSON-serializable sample value per `BaseStyleProps` key, used to detect
+ * drift between the TS style types and the Rust style parser.
+ *
+ * - `satisfies Required<BaseStyleProps>` makes this exhaustive in both
+ *   directions at compile time: a key added to `BaseStyleProps` without a
+ *   sample, or a sample without a key, fails `tsc`.
+ * - `style-prop-samples.test.ts` snapshots this map to
+ *   `crates/core/tests/fixtures/style_prop_samples.json`, where the Rust test
+ *   `every_ts_style_prop_is_recognized` (style/parse.rs) feeds each entry
+ *   through the real parser and fails if a key is not recognized.
+ *
+ * Every sample must parse to a non-default (`Some`) value in Rust, so prefer
+ * unambiguous, obviously-valid values. After editing, regenerate the fixture:
+ * `pnpm -C packages/sdk test:run -- -u`
+ */
+export const STYLE_PROP_SAMPLES = {
+  display: "grid",
+  flex: 1,
+  flexGrow: 2,
+  flexShrink: 3,
+  flexBasis: "10px",
+  flexWrap: "wrap",
+  flexDirection: "column",
+  width: "10px",
+  height: "20px",
+  minWidth: "1px",
+  minHeight: "2px",
+  maxWidth: "100px",
+  maxHeight: "200px",
+  aspectRatio: 1.5,
+  padding: "4px",
+  paddingX: "5px",
+  paddingY: "6px",
+  paddingTop: "1px",
+  paddingRight: "2px",
+  paddingBottom: "3px",
+  paddingLeft: "4px",
+  gap: "8px",
+  gapX: "9px",
+  gapY: "10px",
+  alignItems: "center",
+  alignSelf: "flex-end",
+  alignContent: "space-between",
+  justifyContent: "space-around",
+  gridTemplateColumns: 3,
+  gridTemplateRows: 4,
+  gridColumn: "span 2",
+  gridRow: "1 / 3",
+  gridColumnStart: 2,
+  gridColumnEnd: 4,
+  gridColumnSpan: 2,
+  gridRowStart: 1,
+  gridRowEnd: 3,
+  gridRowSpan: 2,
+  margin: "4px",
+  marginX: "5px",
+  marginY: "6px",
+  marginTop: "1px",
+  marginRight: "2px",
+  marginBottom: "3px",
+  marginLeft: "4px",
+  position: "absolute",
+  inset: "0px",
+  top: "1px",
+  right: "2px",
+  bottom: "3px",
+  left: "4px",
+  backgroundColor: "#3d5a80",
+  borderRadius: "4px",
+  borderWidth: "1px",
+  borderColor: "#ff0000",
+  color: "#00ff00",
+  fontSize: "14px",
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  textOverflow: "ellipsis",
+  lineClamp: 2,
+  overflow: "scroll",
+  overflowX: "hidden",
+  overflowY: "scroll",
+  opacity: 0.5,
+  visibility: "hidden",
+  borderStyle: "dashed",
+  borderTopWidth: "1px",
+  borderRightWidth: "2px",
+  borderBottomWidth: "3px",
+  borderLeftWidth: "4px",
+  borderTopLeftRadius: "1px",
+  borderTopRightRadius: "2px",
+  borderBottomRightRadius: "3px",
+  borderBottomLeftRadius: "4px",
+  scrollbarWidth: "12px",
+  boxShadow: "md",
+  textAlign: "center",
+  fontStyle: "italic",
+  fontFamily: "monospace",
+  lineHeight: 1.5,
+  textDecorationLine: "underline",
+  textDecorationColor: "#0000ff",
+  textDecorationStyle: "wavy",
+  textDecorationThickness: 2,
+  textBackgroundColor: "#ffff00",
+  fontFeatures: { liga: false },
+} satisfies Required<BaseStyleProps>;

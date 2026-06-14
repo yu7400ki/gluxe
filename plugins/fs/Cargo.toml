@@ -1,0 +1,15 @@
+[package]
+name = "gluxe-plugin-fs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Filesystem plugin for gluxe: read directories and files from JavaScript."
+keywords = ["gluxe", "plugin", "filesystem", "fs", "react"]
+categories = ["gui", "filesystem"]
+
+[dependencies]
+gluxe = { path = "../../crates/core" }
+serde_json = "1"

@@ -1,0 +1,16 @@
+[package]
+name = "file-explorer"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "file-explorer"
+path = "src/main.rs"
+
+[dependencies]
+gluxe = { path = "../../crates/core" }
+gluxe-plugin-fs = { path = "../../plugins/fs" }
+
+[build-dependencies]
+gluxe-build = { path = "../../crates/build-support" }

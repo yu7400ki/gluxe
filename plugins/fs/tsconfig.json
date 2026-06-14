@@ -1,0 +1,4 @@
+{
+  "extends": "@gluxe/config/typescript/base",
+  "include": ["js/**/*"]
+}

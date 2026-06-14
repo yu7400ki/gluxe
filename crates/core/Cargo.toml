@@ -1,0 +1,77 @@
+[package]
+name = "gluxe"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Build native, GPU-rendered desktop apps in React — a Rust runtime that executes your JS on the Boa engine and paints it with GPUI."
+keywords = ["gui", "react", "desktop", "gpui", "ui"]
+categories = ["gui", "graphics"]
+
+[features]
+default = ["intl"]
+# Enable a real HTTP client (reqwest) for remote image loading.
+# Without this feature, GPUI falls back to NullHttpClient and remote URLs
+# silently fail to load. Opt-in because reqwest/hyper/TLS are heavy deps.
+http = ["dep:reqwest_client"]
+# Enable JS `Intl` support and locale-aware methods (e.g. `Date.prototype.
+# toLocaleString`) by bundling ICU data into the binary. Without it, those
+# builtins throw "Function Unimplemented" at runtime. On by default; opt out
+# with `default-features = false` to shrink the binary if you don't need it.
+intl = ["boa_engine/intl_bundled"]
+
+[dependencies]
+gluxe-macros = { path = "../macros" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "06826ef10f7ebd89f79ff72bb652f45ccdbbe9af" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "06826ef10f7ebd89f79ff72bb652f45ccdbbe9af", features = [
+    "font-kit",
+    "x11",
+    "wayland",
+] }
+# Pinned to a boa git rev (not the 0.21.1 crates.io release) for
+# boa-dev/boa#4378, which implements `Intl.DateTimeFormat.prototype.format`.
+# That landed after 0.21.1, so the released crate lacks working locale-aware
+# date formatting. boa_engine + boa_runtime must share the same rev.
+# Like the gpui pin, do NOT `cargo update` this to a floating version.
+boa_engine = { git = "https://github.com/boa-dev/boa", rev = "85272bf9c8d17c2609aaeb06f3dee88e7f865e77" }
+boa_runtime = { git = "https://github.com/boa-dev/boa", rev = "85272bf9c8d17c2609aaeb06f3dee88e7f865e77" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Fast, deterministic hasher for the small integer ElementId keys in the element
+# tree. The std HashMap default (SipHash) is overkill for u64 keys; FxHashMap
+# trims per-node lookup cost in the per-frame renderer. Already in the tree
+# transitively via smol/gpui, so this pulls in no new external dependency.
+rustc-hash = "2"
+# Awaitable MPMC signal channel used to wake the foreground render pump only
+# when there is work to do (events / async invoke completion), replacing the
+# old fixed-interval polling loop. Already in the tree transitively via smol.
+async-channel = "2"
+# Single-threaded job-loop primitives (block_on / poll_once / yield_now and a
+# FutureGroup) used by `GpuiJobExecutor` to drive Boa's promise/async jobs and
+# clock jobs without busy-waiting on future timers. Versions pinned to match
+# boa_engine's own usage; both are already in the tree transitively via boa.
+futures-lite = "2.6.1"
+futures-concurrency = "7.7.1"
+reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "06826ef10f7ebd89f79ff72bb652f45ccdbbe9af", optional = true }
+unicode-segmentation = "1"
+include_dir = "0.7"
+url = "2"
+# Filesystem watcher for dev-mode hot reload (`GLUXE_DEV_DIST`). A plain
+# always-on dependency because cargo features cannot be conditioned on
+# `cfg(debug_assertions)`; every usage lives behind that cfg, so release builds
+# dead-strip the watcher code and only pay a trivial compile cost.
+notify = "8"
+# Heap-allocated stack switching (the same crate rustc's parser uses). Boa's
+# recursive-descent parser/compiler has no recursion guard and needs tens of
+# MB of stack for a minified React bundle; `stack.rs` switches onto a big
+# heap-backed stack at every JS entry point so the thread's own stack size no
+# longer matters. See `stack.rs` for the full rationale.
+stacker = "0.1"
+
+# For decoding the window icon (.ico) for X11 (`WindowOptions::icon`). Must
+# stay on the same major version as gpui's `image` dep so `RgbaImage` unifies
+# to the same type across the dependency graph (currently 0.25.x).
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+image = { version = "0.25", default-features = false, features = ["ico"] }

@@ -1,0 +1,587 @@
+use boa_engine::{Context as JsContext, JsObject, JsValue, js_string, property::PropertyKey};
+use gpui::Rgba;
+
+use super::color::parse_color;
+use super::reader::{PropReader, length_from_value};
+use crate::anim::{Easing, TransitionProperty, TransitionSpec, field_id_from_name};
+use crate::model::{Props, StyleFields};
+
+// ---------------------------------------------------------------------------
+// Composite-field presence tracking
+// ---------------------------------------------------------------------------
+
+/// Tracks which composite style fields appeared in any source object.
+///
+/// Composite fields have multi-key precedence rules that must be resolved
+/// independently of JS key-iteration order (e.g. `overflowX` always wins over
+/// `overflow`). We flag their presence here and resolve them afterwards via the
+/// order-correct [`PropReader`] getters, so absent composites cost nothing.
+#[derive(Default)]
+struct CompositeSeen {
+    flex: bool,
+    overflow: bool,
+    grid_col: bool,
+    grid_row: bool,
+    box_shadow: bool,
+    font_weight: bool,
+    line_height: bool,
+    font_features: bool,
+}
+
+/// Records composite-field presence; returns `true` so the caller can skip the simple-field path.
+fn mark_composite(seen: &mut CompositeSeen, key: &str) -> bool {
+    match key {
+        "flex" => seen.flex = true,
+        "overflow" | "overflowX" | "overflowY" => seen.overflow = true,
+        "gridColumn" | "gridColumnStart" | "gridColumnEnd" | "gridColumnSpan" => {
+            seen.grid_col = true
+        }
+        "gridRow" | "gridRowStart" | "gridRowEnd" | "gridRowSpan" => seen.grid_row = true,
+        "boxShadow" => seen.box_shadow = true,
+        "fontWeight" => seen.font_weight = true,
+        "lineHeight" => seen.line_height = true,
+        "fontFeatures" => seen.font_features = true,
+        _ => return false,
+    }
+    true
+}
+
+// ---------------------------------------------------------------------------
+// Simple (1:1 key → field) assignment
+// ---------------------------------------------------------------------------
+
+fn str_of(value: &JsValue) -> Option<String> {
+    value.as_string().and_then(|s| s.to_std_string().ok())
+}
+
+fn f32_of(value: &JsValue) -> Option<f32> {
+    value.as_number().map(|n| n as f32)
+}
+
+fn color_of(value: &JsValue) -> Option<Rgba> {
+    str_of(value).and_then(|s| parse_color(&s))
+}
+
+/// Assign a single non-composite style field from an already-fetched JS `value`.
+/// Only assigns when conversion yields `Some`, so an unparseable high-priority value
+/// does not clobber a valid low-priority one.
+fn apply_simple_field(fields: &mut StyleFields, key: &str, value: &JsValue) {
+    macro_rules! set {
+        ($field:ident, $val:expr) => {
+            if let Some(v) = $val {
+                fields.$field = Some(v);
+            }
+        };
+    }
+    match key {
+        // ---- Lengths ----
+        "width" => set!(width, length_from_value(value)),
+        "height" => set!(height, length_from_value(value)),
+        "flexBasis" => set!(flex_basis, length_from_value(value)),
+        "padding" => set!(padding, length_from_value(value)),
+        "paddingX" => set!(padding_x, length_from_value(value)),
+        "paddingY" => set!(padding_y, length_from_value(value)),
+        "paddingTop" => set!(padding_top, length_from_value(value)),
+        "paddingRight" => set!(padding_right, length_from_value(value)),
+        "paddingBottom" => set!(padding_bottom, length_from_value(value)),
+        "paddingLeft" => set!(padding_left, length_from_value(value)),
+        "gap" => set!(gap, length_from_value(value)),
+        "gapX" => set!(gap_x, length_from_value(value)),
+        "gapY" => set!(gap_y, length_from_value(value)),
+        "borderRadius" => set!(border_radius, length_from_value(value)),
+        "borderWidth" => set!(border_width, length_from_value(value)),
+        "fontSize" => set!(font_size, length_from_value(value)),
+        "margin" => set!(margin, length_from_value(value)),
+        "marginX" => set!(margin_x, length_from_value(value)),
+        "marginY" => set!(margin_y, length_from_value(value)),
+        "marginTop" => set!(margin_top, length_from_value(value)),
+        "marginRight" => set!(margin_right, length_from_value(value)),
+        "marginBottom" => set!(margin_bottom, length_from_value(value)),
+        "marginLeft" => set!(margin_left, length_from_value(value)),
+        "minWidth" => set!(min_width, length_from_value(value)),
+        "minHeight" => set!(min_height, length_from_value(value)),
+        "maxWidth" => set!(max_width, length_from_value(value)),
+        "maxHeight" => set!(max_height, length_from_value(value)),
+        "inset" => set!(inset, length_from_value(value)),
+        "top" => set!(top, length_from_value(value)),
+        "right" => set!(right, length_from_value(value)),
+        "bottom" => set!(bottom, length_from_value(value)),
+        "left" => set!(left, length_from_value(value)),
+        "borderTopWidth" => set!(border_top_width, length_from_value(value)),
+        "borderRightWidth" => set!(border_right_width, length_from_value(value)),
+        "borderBottomWidth" => set!(border_bottom_width, length_from_value(value)),
+        "borderLeftWidth" => set!(border_left_width, length_from_value(value)),
+        "borderTopLeftRadius" => set!(border_top_left_radius, length_from_value(value)),
+        "borderTopRightRadius" => set!(border_top_right_radius, length_from_value(value)),
+        "borderBottomRightRadius" => set!(border_bottom_right_radius, length_from_value(value)),
+        "borderBottomLeftRadius" => set!(border_bottom_left_radius, length_from_value(value)),
+        "scrollbarWidth" => set!(scrollbar_width, length_from_value(value)),
+        "textDecorationThickness" => set!(text_decoration_thickness, length_from_value(value)),
+        // ---- Numbers ----
+        "flexGrow" => set!(flex_grow, f32_of(value)),
+        "flexShrink" => set!(flex_shrink, f32_of(value)),
+        "lineClamp" => set!(line_clamp, f32_of(value)),
+        "aspectRatio" => set!(aspect_ratio, f32_of(value)),
+        "opacity" => set!(opacity, f32_of(value)),
+        // ---- Grid track counts (number → u16, min 1) ----
+        "gridTemplateColumns" => {
+            set!(
+                grid_template_columns,
+                f32_of(value).map(|n| (n as u16).max(1))
+            )
+        }
+        "gridTemplateRows" => set!(grid_template_rows, f32_of(value).map(|n| (n as u16).max(1))),
+        // ---- Strings ----
+        "display" => set!(display, str_of(value)),
+        "flexDirection" => set!(flex_direction, str_of(value)),
+        "alignItems" => set!(align_items, str_of(value)),
+        "justifyContent" => set!(justify_content, str_of(value)),
+        "flexWrap" => set!(flex_wrap, str_of(value)),
+        "alignSelf" => set!(align_self, str_of(value)),
+        "alignContent" => set!(align_content, str_of(value)),
+        "cursor" => set!(cursor, str_of(value)),
+        "whiteSpace" => set!(white_space, str_of(value)),
+        "textOverflow" => set!(text_overflow, str_of(value)),
+        "position" => set!(position, str_of(value)),
+        "visibility" => set!(visibility, str_of(value)),
+        "borderStyle" => set!(border_style, str_of(value)),
+        "textAlign" => set!(text_align, str_of(value)),
+        "fontStyle" => set!(font_style, str_of(value)),
+        "fontFamily" => set!(font_family, str_of(value)),
+        "textDecorationLine" => set!(text_decoration_line, str_of(value)),
+        "textDecorationStyle" => set!(text_decoration_style, str_of(value)),
+        // ---- Colors ----
+        "backgroundColor" => set!(background_color, color_of(value)),
+        "color" => set!(color, color_of(value)),
+        "borderColor" => set!(border_color, color_of(value)),
+        "textDecorationColor" => set!(text_decoration_color, color_of(value)),
+        "textBackgroundColor" => set!(text_background_color, color_of(value)),
+        // Unknown / non-style / composite keys: ignored here.
+        _ => {}
+    }
+}
+
+/// Walk one source object's own string keys, applying simple fields and recording
+/// composite-field presence. Array-index and symbol keys are skipped.
+fn apply_object_keys(
+    fields: &mut StyleFields,
+    seen: &mut CompositeSeen,
+    obj: &JsObject,
+    ctx: &mut JsContext,
+) {
+    let Ok(keys) = obj.own_property_keys(ctx) else {
+        return;
+    };
+    for key in keys {
+        let PropertyKey::String(ref name_js) = key else {
+            continue;
+        };
+        let Ok(name) = name_js.to_std_string() else {
+            continue;
+        };
+        if mark_composite(seen, &name) {
+            continue;
+        }
+        let Ok(value) = obj.get(key, ctx) else {
+            continue;
+        };
+        apply_simple_field(fields, &name, &value);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// StyleFields assembly
+// ---------------------------------------------------------------------------
+
+/// Build a [`StyleFields`] from an ordered list of source objects (highest-priority first).
+///
+/// Simple fields are applied in reverse (lowest → highest priority) so later writes win.
+/// Composite fields are resolved afterwards via [`PropReader`], which also uses
+/// highest-priority-first order.
+fn parse_style_fields(objs: &[&JsObject], ctx: &mut JsContext) -> StyleFields {
+    let mut fields = StyleFields::default();
+    let mut seen = CompositeSeen::default();
+
+    for obj in objs.iter().rev() {
+        apply_object_keys(&mut fields, &mut seen, obj, ctx);
+    }
+
+    // Resolve composite fields only when a relevant key appeared.
+    if seen.flex
+        || seen.overflow
+        || seen.grid_col
+        || seen.grid_row
+        || seen.box_shadow
+        || seen.font_weight
+        || seen.line_height
+        || seen.font_features
+    {
+        let r = PropReader::new(objs.to_vec());
+        if seen.flex {
+            let (flex_num, flex_kw) = r.flex(ctx);
+            fields.flex = flex_num;
+            fields.flex_keyword = flex_kw;
+        }
+        if seen.overflow {
+            let (x, y) = r.overflow(ctx);
+            fields.overflow_x = x;
+            fields.overflow_y = y;
+        }
+        if seen.grid_col {
+            let (start, end) = r.grid_axis(
+                "gridColumn",
+                "gridColumnStart",
+                "gridColumnEnd",
+                "gridColumnSpan",
+                ctx,
+            );
+            fields.grid_column_start = start;
+            fields.grid_column_end = end;
+        }
+        if seen.grid_row {
+            let (start, end) =
+                r.grid_axis("gridRow", "gridRowStart", "gridRowEnd", "gridRowSpan", ctx);
+            fields.grid_row_start = start;
+            fields.grid_row_end = end;
+        }
+        if seen.box_shadow {
+            fields.box_shadow = r.box_shadow(ctx);
+        }
+        if seen.font_weight {
+            fields.font_weight = r.font_weight(ctx);
+        }
+        if seen.line_height {
+            fields.line_height = r.line_height(ctx);
+        }
+        if seen.font_features {
+            fields.font_features = r.font_features(ctx);
+        }
+    }
+
+    fields
+}
+
+// ---------------------------------------------------------------------------
+// Transition parsing
+// ---------------------------------------------------------------------------
+
+/// Parse one `{ property, duration, easing?, delay? }` declaration.
+/// Returns `None` when `property` is unknown or non-animatable (spec is dropped).
+fn parse_transition_item(obj: &JsObject, ctx: &mut JsContext) -> Option<TransitionSpec> {
+    let property = match obj.get(js_string!("property"), ctx).ok() {
+        Some(v) if !v.is_undefined() => {
+            let s = str_of(&v)?;
+            if s == "all" {
+                TransitionProperty::All
+            } else {
+                TransitionProperty::Field(field_id_from_name(&s)?)
+            }
+        }
+        _ => TransitionProperty::All,
+    };
+    let duration_ms = obj
+        .get(js_string!("duration"), ctx)
+        .ok()
+        .and_then(|v| f32_of(&v))
+        .map(|n| n.max(0.0))
+        .unwrap_or(0.0);
+    let delay_ms = obj
+        .get(js_string!("delay"), ctx)
+        .ok()
+        .and_then(|v| f32_of(&v))
+        .map(|n| n.max(0.0))
+        .unwrap_or(0.0);
+    let easing = obj
+        .get(js_string!("easing"), ctx)
+        .ok()
+        .and_then(|v| str_of(&v))
+        .and_then(|s| Easing::parse(&s))
+        .unwrap_or(Easing::Ease);
+    Some(TransitionSpec {
+        property,
+        duration_ms,
+        delay_ms,
+        easing,
+    })
+}
+
+/// Parse the `transition` style key (single object or array). Unparseable → empty list.
+fn parse_transitions(value: &JsValue, ctx: &mut JsContext) -> Vec<TransitionSpec> {
+    let Some(obj) = value.as_object() else {
+        return Vec::new();
+    };
+    if !obj.is_array() {
+        return parse_transition_item(&obj, ctx).into_iter().collect();
+    }
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as u32;
+    let mut specs = Vec::with_capacity(len as usize);
+    for i in 0..len {
+        if let Ok(item) = obj.get(js_string!(format!("{i}")), ctx) {
+            if let Some(item_obj) = item.as_object() {
+                specs.extend(parse_transition_item(&item_obj, ctx));
+            }
+        }
+    }
+    specs
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
+    // `style` sub-object takes precedence over top-level prop keys.
+    let style_obj: Option<JsObject> = obj
+        .get(js_string!("style"), ctx)
+        .ok()
+        .and_then(|value| value.as_object());
+
+    let mut objs: Vec<&JsObject> = Vec::with_capacity(2);
+    if let Some(s) = style_obj.as_ref() {
+        objs.push(s);
+    }
+    objs.push(obj);
+    let style = parse_style_fields(&objs, ctx);
+
+    // Pseudo-selector overrides are parsed from nested objects inside `style` only.
+    let hover_obj = style_obj
+        .as_ref()
+        .and_then(|s| s.get(js_string!("_hover"), ctx).ok())
+        .and_then(|value| value.as_object());
+    let hover = hover_obj.map(|ho| Box::new(parse_style_fields(&[&ho], ctx)));
+
+    let active_obj = style_obj
+        .as_ref()
+        .and_then(|s| s.get(js_string!("_active"), ctx).ok())
+        .and_then(|value| value.as_object());
+    let active = active_obj.map(|ao| Box::new(parse_style_fields(&[&ao], ctx)));
+
+    // Transitions come from `style` only (never top-level, never `_hover`/`_active`).
+    let transitions = style_obj
+        .as_ref()
+        .and_then(|s| s.get(js_string!("transition"), ctx).ok())
+        .map(|v| parse_transitions(&v, ctx))
+        .unwrap_or_default();
+
+    // Non-style props are read from the top-level object only.
+    let obj_reader = PropReader::new(vec![obj]);
+    Props {
+        hover,
+        active,
+        style,
+        transitions,
+        src: obj_reader.str_val("src", ctx),
+        value: obj_reader.str_val("value", ctx),
+        placeholder: obj_reader.str_val("placeholder", ctx),
+        autofocus: obj_reader.bool_val("autoFocus", ctx).unwrap_or(false),
+        window_control_area: obj_reader
+            .str_val("windowControlArea", ctx)
+            .as_deref()
+            .and_then(crate::model::parse_window_control_area),
+        // Events are populated separately from the third bridge argument.
+        ..Props::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{LengthValue, OverflowMode};
+
+    /// Evaluate a JS object-literal expression and run it through `parse_props`.
+    fn props_from_js(src: &str) -> Props {
+        let mut ctx = JsContext::builder().build().expect("ctx");
+        let value = crate::stack::eval_on_parser_stack(&mut ctx, src.as_bytes()).expect("eval");
+        let obj = value.as_object().expect("object literal");
+        parse_props(&obj, &mut ctx)
+    }
+
+    #[test]
+    fn style_overrides_top_level() {
+        let p = props_from_js("({ width: 5, style: { width: 10 } })");
+        assert_eq!(p.style.width, Some(LengthValue::Px(10.0)));
+    }
+
+    #[test]
+    fn top_level_used_when_style_absent() {
+        let p = props_from_js("({ width: 5, style: { height: 20 } })");
+        assert_eq!(p.style.width, Some(LengthValue::Px(5.0)));
+        assert_eq!(p.style.height, Some(LengthValue::Px(20.0)));
+    }
+
+    #[test]
+    fn unparseable_high_priority_falls_back_to_low() {
+        // style.width (boolean) is not a valid length → keep the top-level value.
+        let p = props_from_js("({ width: 5, style: { width: true } })");
+        assert_eq!(p.style.width, Some(LengthValue::Px(5.0)));
+    }
+
+    #[test]
+    fn overflow_x_overrides_overflow_independent_of_key_order() {
+        // overflowX must win over overflow for the x axis regardless of which key
+        // appears first in the object literal.
+        let a = props_from_js("({ style: { overflowX: 'scroll', overflow: 'hidden' } })");
+        assert_eq!(a.style.overflow_x, Some(OverflowMode::Scroll));
+        assert_eq!(a.style.overflow_y, Some(OverflowMode::Hidden));
+        let b = props_from_js("({ style: { overflow: 'hidden', overflowX: 'scroll' } })");
+        assert_eq!(b.style.overflow_x, Some(OverflowMode::Scroll));
+        assert_eq!(b.style.overflow_y, Some(OverflowMode::Hidden));
+    }
+
+    #[test]
+    fn parses_strings_colors_and_flex() {
+        let p =
+            props_from_js("({ style: { display: 'flex', backgroundColor: '#ff0000', flex: 1 } })");
+        assert_eq!(p.style.display.as_deref(), Some("flex"));
+        assert!(p.style.background_color.is_some());
+        assert_eq!(p.style.flex, Some(1.0));
+    }
+
+    #[test]
+    fn transition_single_object() {
+        let p = props_from_js(
+            "({ style: { transition: { property: 'width', duration: 300, easing: 'ease-out', delay: 50 } } })",
+        );
+        assert_eq!(p.transitions.len(), 1);
+        let t = &p.transitions[0];
+        assert_eq!(
+            t.property,
+            TransitionProperty::Field(crate::anim::FieldId::width)
+        );
+        assert_eq!(t.duration_ms, 300.0);
+        assert_eq!(t.delay_ms, 50.0);
+        assert_eq!(t.easing, Easing::EaseOut);
+    }
+
+    #[test]
+    fn transition_array_and_defaults() {
+        let p = props_from_js(
+            "({ style: { transition: [ { property: 'all', duration: 200 }, { duration: 100, easing: 'linear' } ] } })",
+        );
+        assert_eq!(p.transitions.len(), 2);
+        assert_eq!(p.transitions[0].property, TransitionProperty::All);
+        assert_eq!(p.transitions[0].easing, Easing::Ease); // default
+        assert_eq!(p.transitions[0].delay_ms, 0.0); // default
+        assert_eq!(p.transitions[1].property, TransitionProperty::All); // property defaults to all
+        assert_eq!(p.transitions[1].easing, Easing::Linear);
+    }
+
+    #[test]
+    fn transition_unknown_property_drops_spec() {
+        let p = props_from_js(
+            "({ style: { transition: [ { property: 'display', duration: 100 }, { property: 'opacity', duration: 100 } ] } })",
+        );
+        assert_eq!(p.transitions.len(), 1);
+        assert_eq!(
+            p.transitions[0].property,
+            TransitionProperty::Field(crate::anim::FieldId::opacity)
+        );
+    }
+
+    #[test]
+    fn transition_unknown_easing_falls_back_to_ease() {
+        let p = props_from_js("({ style: { transition: { duration: 100, easing: 'bounce' } } })");
+        assert_eq!(p.transitions[0].easing, Easing::Ease);
+    }
+
+    #[test]
+    fn transition_invalid_or_absent_is_empty() {
+        assert!(props_from_js("({ style: {} })").transitions.is_empty());
+        assert!(
+            props_from_js("({ style: { transition: 'all 200ms' } })")
+                .transitions
+                .is_empty()
+        );
+        // Negative values clamp to zero.
+        let p = props_from_js("({ style: { transition: { duration: -5, delay: -3 } } })");
+        assert_eq!(p.transitions[0].duration_ms, 0.0);
+        assert_eq!(p.transitions[0].delay_ms, 0.0);
+    }
+
+    #[test]
+    fn pseudo_selectors_parse_independently() {
+        let p = props_from_js("({ style: { _hover: { width: 7 }, _active: { width: 9 } } })");
+        assert_eq!(
+            p.hover.as_ref().map(|h| h.width),
+            Some(Some(LengthValue::Px(7.0)))
+        );
+        assert_eq!(
+            p.active.as_ref().map(|a| a.width),
+            Some(Some(LengthValue::Px(9.0)))
+        );
+    }
+
+    // ---- windowControlArea prop ----
+
+    #[test]
+    fn window_control_area_drag() {
+        use gpui::WindowControlArea;
+        let p = props_from_js("({ windowControlArea: 'drag' })");
+        assert_eq!(p.window_control_area, Some(WindowControlArea::Drag));
+    }
+
+    #[test]
+    fn window_control_area_close() {
+        use gpui::WindowControlArea;
+        let p = props_from_js("({ windowControlArea: 'close' })");
+        assert_eq!(p.window_control_area, Some(WindowControlArea::Close));
+    }
+
+    #[test]
+    fn window_control_area_max() {
+        use gpui::WindowControlArea;
+        let p = props_from_js("({ windowControlArea: 'max' })");
+        assert_eq!(p.window_control_area, Some(WindowControlArea::Max));
+    }
+
+    #[test]
+    fn window_control_area_min() {
+        use gpui::WindowControlArea;
+        let p = props_from_js("({ windowControlArea: 'min' })");
+        assert_eq!(p.window_control_area, Some(WindowControlArea::Min));
+    }
+
+    #[test]
+    fn window_control_area_bogus_gives_none() {
+        let p = props_from_js("({ windowControlArea: 'bogus' })");
+        assert!(p.window_control_area.is_none());
+    }
+
+    #[test]
+    fn window_control_area_number_gives_none() {
+        let p = props_from_js("({ windowControlArea: 42 })");
+        assert!(p.window_control_area.is_none());
+    }
+
+    #[test]
+    fn window_control_area_absent_gives_none() {
+        let p = props_from_js("({ width: 10 })");
+        assert!(p.window_control_area.is_none());
+    }
+
+    /// Fixture is generated from `packages/sdk/js/style-prop-samples.ts` via
+    /// `pnpm -C packages/sdk test:run -- -u`. Catches TS props silently ignored
+    /// by the Rust parser; the reverse (dead Rust arm) is not detected here.
+    #[test]
+    fn every_ts_style_prop_is_recognized() {
+        let fixture = include_str!("../../tests/fixtures/style_prop_samples.json");
+        let samples: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(fixture).expect("valid fixture JSON");
+        assert!(!samples.is_empty(), "fixture must not be empty");
+        let baseline = props_from_js("({})");
+        for (key, value) in &samples {
+            let src = format!("({{ style: {{ {key:?}: {value} }} }})");
+            let parsed = props_from_js(&src);
+            assert_ne!(
+                parsed, baseline,
+                "TS style key '{key}' (sample {value}) was not recognized by the \
+                 Rust parser — add it to apply_simple_field / the composite keys \
+                 in style/parse.rs, or fix the sample in style-prop-samples.ts"
+            );
+        }
+    }
+}

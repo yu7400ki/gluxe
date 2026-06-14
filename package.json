@@ -1,0 +1,16 @@
+{
+  "name": "gluxe",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -F=./packages/* -F=./plugins/* build",
+    "typecheck": "pnpm -F=./packages/* -F=./plugins/* typecheck",
+    "format": "oxfmt --write .",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "oxfmt": "catalog:lint",
+    "typescript": "catalog:build"
+  },
+  "packageManager": "pnpm@11.5.0"
+}

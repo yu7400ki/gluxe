@@ -1,0 +1,14 @@
+[workspace]
+members = ["crates/*", "plugins/*", "examples/*"]
+default-members = ["crates/*", "plugins/*"]
+resolver = "3"
+
+# Shared package metadata inherited by the publishable crates via
+# `<field>.workspace = true`. Keeps version/license/repository in one place.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Yuki Natori"]
+license = "MIT"
+repository = "https://github.com/yu7400ki/gluxe"
+homepage = "https://github.com/yu7400ki/gluxe"

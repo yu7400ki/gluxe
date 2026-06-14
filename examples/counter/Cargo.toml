@@ -1,0 +1,16 @@
+[package]
+name = "counter-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "counter-example"
+path = "src/main.rs"
+
+[dependencies]
+gluxe = { path = "../../crates/core", features = ["http"] }
+gluxe-plugin-fs = { path = "../../plugins/fs" }
+
+[build-dependencies]
+gluxe-build = { path = "../../crates/build-support" }

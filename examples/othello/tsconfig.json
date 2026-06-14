@@ -1,0 +1,7 @@
+{
+  "extends": "@gluxe/config/typescript/base",
+  "compilerOptions": {
+    "types": ["vite/client", "@gluxe/router/client"]
+  },
+  "include": ["./**/*"]
+}

@@ -1,0 +1,7 @@
+{
+  "extends": "@gluxe/config/typescript/base.json",
+  "compilerOptions": {
+    "types": ["@types/node"]
+  },
+  "include": ["js/**/*"]
+}

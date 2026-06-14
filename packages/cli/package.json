@@ -1,0 +1,56 @@
+{
+  "name": "@gluxe/cli",
+  "version": "0.1.0",
+  "description": "CLI for gluxe app projects: build, run, and start with hot reload.",
+  "keywords": [
+    "build",
+    "cli",
+    "desktop",
+    "gluxe",
+    "react"
+  ],
+  "homepage": "https://github.com/yu7400ki/gluxe#readme",
+  "bugs": "https://github.com/yu7400ki/gluxe/issues",
+  "license": "MIT",
+  "author": "Yuki Natori",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yu7400ki/gluxe.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "gluxe": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "cross-spawn": "catalog:prod",
+    "gunshi": "catalog:prod"
+  },
+  "devDependencies": {
+    "@gluxe/config": "workspace:*",
+    "@types/cross-spawn": "catalog:types",
+    "@types/node": "catalog:types",
+    "oxlint": "catalog:lint",
+    "tsdown": "catalog:build",
+    "typescript": "catalog:build",
+    "vitest": "catalog:test"
+  }
+}

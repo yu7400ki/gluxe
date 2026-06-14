@@ -1,0 +1,74 @@
+{
+  "name": "@gluxe/router",
+  "version": "0.1.0",
+  "description": "File-based and code-based router for gluxe apps, with a Vite plugin.",
+  "keywords": [
+    "desktop",
+    "gluxe",
+    "react",
+    "router",
+    "routing"
+  ],
+  "homepage": "https://github.com/yu7400ki/gluxe#readme",
+  "bugs": "https://github.com/yu7400ki/gluxe/issues",
+  "license": "MIT",
+  "author": "Yuki Natori",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yu7400ki/gluxe.git",
+    "directory": "packages/router"
+  },
+  "files": [
+    "dist",
+    "client.d.ts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.mts",
+      "import": "./dist/vite.mjs"
+    },
+    "./client": {
+      "types": "./client.d.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "lint": "oxlint",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "gluxe": "workspace:*"
+  },
+  "devDependencies": {
+    "@gluxe/config": "workspace:*",
+    "@types/node": "catalog:types",
+    "@types/react": "catalog:types",
+    "@types/react-dom": "catalog:types",
+    "jsdom": "catalog:test",
+    "oxlint": "catalog:lint",
+    "react": "catalog:prod",
+    "react-dom": "catalog:test",
+    "tsdown": "catalog:build",
+    "typescript": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
+  },
+  "peerDependencies": {
+    "react": "^19.2.6",
+    "vite": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

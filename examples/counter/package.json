@@ -1,0 +1,21 @@
+{
+  "name": "counter-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch --mode development"
+  },
+  "dependencies": {
+    "gluxe": "workspace:*",
+    "react": "catalog:prod"
+  },
+  "devDependencies": {
+    "@gluxe/cli": "workspace:*",
+    "@gluxe/config": "workspace:*",
+    "@types/react": "catalog:types",
+    "@vitejs/plugin-react": "catalog:build",
+    "vite": "catalog:build"
+  }
+}

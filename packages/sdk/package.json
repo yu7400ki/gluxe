@@ -1,0 +1,63 @@
+{
+  "name": "gluxe",
+  "version": "0.1.0",
+  "description": "React SDK for the gluxe desktop framework — host config, primitives, and Vite plugin.",
+  "keywords": [
+    "desktop",
+    "gluxe",
+    "gpu",
+    "gpui",
+    "native",
+    "react",
+    "ui"
+  ],
+  "homepage": "https://github.com/yu7400ki/gluxe#readme",
+  "bugs": "https://github.com/yu7400ki/gluxe/issues",
+  "license": "MIT",
+  "author": "Yuki Natori",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yu7400ki/gluxe.git",
+    "directory": "packages/sdk"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    },
+    "./vite": {
+      "import": "./dist/vite.mjs",
+      "types": "./dist/vite.d.mts"
+    },
+    "./window": {
+      "import": "./dist/window.mjs",
+      "types": "./dist/window.d.mts"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "lint": "oxlint",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "catalog:prod",
+    "react-reconciler": "catalog:prod"
+  },
+  "devDependencies": {
+    "@gluxe/config": "workspace:*",
+    "@types/node": "catalog:types",
+    "@types/react": "catalog:types",
+    "@types/react-reconciler": "catalog:types",
+    "oxlint": "catalog:lint",
+    "rolldown": "catalog:build",
+    "tsdown": "catalog:build",
+    "typescript": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
+  }
+}

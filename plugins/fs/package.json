@@ -1,0 +1,49 @@
+{
+  "name": "@gluxe/plugin-fs",
+  "version": "0.1.0",
+  "description": "JavaScript bindings for the gluxe filesystem plugin.",
+  "keywords": [
+    "filesystem",
+    "fs",
+    "gluxe",
+    "plugin",
+    "react"
+  ],
+  "homepage": "https://github.com/yu7400ki/gluxe#readme",
+  "bugs": "https://github.com/yu7400ki/gluxe/issues",
+  "license": "MIT",
+  "author": "Yuki Natori",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yu7400ki/gluxe.git",
+    "directory": "plugins/fs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "gluxe": "workspace:*"
+  },
+  "devDependencies": {
+    "@gluxe/config": "workspace:*",
+    "@types/node": "catalog:types",
+    "oxlint": "catalog:lint",
+    "tsdown": "catalog:build",
+    "typescript": "catalog:build"
+  }
+}

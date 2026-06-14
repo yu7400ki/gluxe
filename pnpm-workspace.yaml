@@ -1,0 +1,42 @@
+packages:
+  - "packages/*"
+  - "plugins/*"
+  - "examples/*"
+
+# Dependencies are categorized by purpose via named catalogs
+# (https://antfu.me/posts/categorize-deps). templates/default is scaffolded
+# outside this workspace, so it keeps literal versions.
+catalogs:
+  # Runtime deps that ship with the published packages / examples
+  prod:
+    react: ^19.2.6
+    react-reconciler: ^0.33.0
+    cross-spawn: ^7.0.6
+    gunshi: ^0.33.0
+
+  # Build-time tooling (bundlers, compilers)
+  build:
+    typescript: ^6.0.3
+    vite: ^8.0.0
+    "@vitejs/plugin-react": ^6.0.0
+    rolldown: ^1.0.3
+    tsdown: ^0.22.0
+
+  # Testing
+  test:
+    vitest: ^4.1.8
+    jsdom: ^26.0.0
+    react-dom: ^19.2.6
+
+  # Linting / formatting
+  lint:
+    oxfmt: ^0.53.0
+    oxlint: ^1.69.0
+
+  # Type definitions
+  types:
+    "@types/node": ^22.0.0
+    "@types/react": ^19.2.15
+    "@types/react-dom": ^19.2.3
+    "@types/react-reconciler": ^0.33.0
+    "@types/cross-spawn": ^6.0.6

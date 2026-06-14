@@ -1,0 +1,21 @@
+{
+  "name": "file-explorer",
+  "window": {
+    "width": 900,
+    "height": 620
+  },
+  "bundle": {
+    "entry": "index.tsx",
+    "outDir": "dist",
+    "build": {
+      "command": "pnpm",
+      "args": ["build"]
+    }
+  },
+  "dev": {
+    "build": {
+      "command": "pnpm",
+      "args": ["dev"]
+    }
+  }
+}
