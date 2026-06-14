@@ -1,4 +1,4 @@
-import { Text, View } from "gluxe";
+import { Text, View } from "@gluxe/react";
 
 import { TurnColor } from "../othello";
 import { C } from "../theme";

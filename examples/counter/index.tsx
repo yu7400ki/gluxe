@@ -1,4 +1,4 @@
-import { registerRootComponent } from "gluxe";
+import { registerRootComponent } from "@gluxe/react";
 
 import App from "./App";
 

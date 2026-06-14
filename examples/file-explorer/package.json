@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@gluxe/plugin-fs": "workspace:*",
-    "gluxe": "workspace:*",
+    "@gluxe/react": "workspace:*",
     "react": "catalog:prod"
   },
   "devDependencies": {

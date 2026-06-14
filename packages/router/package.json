@@ -1,6 +1,6 @@
 {
   "name": "@gluxe/router",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "File-based and code-based router for gluxe apps, with a Vite plugin.",
   "keywords": [
     "desktop",
@@ -46,7 +46,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "gluxe": "workspace:*"
+    "@gluxe/react": "workspace:*"
   },
   "devDependencies": {
     "@gluxe/config": "workspace:*",

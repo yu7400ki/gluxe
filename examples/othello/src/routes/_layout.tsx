@@ -1,5 +1,5 @@
+import { View } from "@gluxe/react";
 import { Outlet } from "@gluxe/router";
-import { View } from "gluxe";
 
 import { TitleBar } from "../components/TitleBar";
 import { C } from "../theme";

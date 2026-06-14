@@ -1,6 +1,6 @@
 // Typed invoke wrappers around the Rust `othello` plugin.
 
-import { invoke } from "gluxe";
+import { invoke } from "@gluxe/react";
 
 /** Cell occupancy: 0 = empty, 1 = black, 2 = white. */
 export type Cell = 0 | 1 | 2;

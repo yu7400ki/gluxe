@@ -1,4 +1,4 @@
-import { View } from "gluxe";
+import { View } from "@gluxe/react";
 
 import { Cell, StateView, TurnColor } from "../othello";
 import {

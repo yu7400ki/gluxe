@@ -563,8 +563,8 @@ mod tests {
         assert!(p.window_control_area.is_none());
     }
 
-    /// Fixture is generated from `packages/sdk/js/style-prop-samples.ts` via
-    /// `pnpm -C packages/sdk test:run -- -u`. Catches TS props silently ignored
+    /// Fixture is generated from `packages/react/js/style-prop-samples.ts` via
+    /// `pnpm -C packages/react test:run -- -u`. Catches TS props silently ignored
     /// by the Rust parser; the reverse (dead Rust arm) is not detected here.
     #[test]
     fn every_ts_style_prop_is_recognized() {

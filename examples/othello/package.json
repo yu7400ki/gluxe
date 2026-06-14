@@ -8,8 +8,8 @@
     "dev": "vite build --watch --mode development"
   },
   "dependencies": {
+    "@gluxe/react": "workspace:*",
     "@gluxe/router": "workspace:*",
-    "gluxe": "workspace:*",
     "react": "catalog:prod"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@
 // Renders through react-dom: gluxe host elements become unknown DOM tags,
 // which is enough to exercise routing — matching, context wiring, Link
 // clicks (bubbled to the View onClick), and re-renders.
-import { Text, View } from "gluxe";
+import { Text, View } from "@gluxe/react";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";

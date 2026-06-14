@@ -1,4 +1,4 @@
-# gluxe (JS SDK)
+# @gluxe/react
 
 The JavaScript/React side of [gluxe](../../README.md): the `react-reconciler`
 host config, the built-in primitives, the Vite plugin that bundles your app, and
@@ -9,24 +9,22 @@ separate `gluxe` Rust crate; the two are designed to work together.
 
 ## Install
 
-In a gluxe app it is already a dependency:
-
-```jsonc
-{ "dependencies": { "gluxe": "workspace:*", "react": "^19" } }
+```sh
+npm install @gluxe/react react
 ```
 
 ## Entry points
 
-| Import         | Contents                                                         |
-| -------------- | ---------------------------------------------------------------- |
-| `gluxe`        | Primitives, `registerRootComponent`, `invoke`, native components |
-| `gluxe/window` | Runtime window API (`setWindowTitle`)                            |
-| `gluxe/vite`   | The Vite plugin that bundles the app for the runtime             |
+| Import                | Contents                                                         |
+| --------------------- | ---------------------------------------------------------------- |
+| `@gluxe/react`        | Primitives, `registerRootComponent`, `invoke`, native components |
+| `@gluxe/react/window` | Runtime window API (`setWindowTitle`)                            |
+| `@gluxe/react/vite`   | The Vite plugin that bundles the app for the runtime             |
 
 ## Rendering a root
 
 ```tsx
-import { registerRootComponent, View, Text } from "gluxe";
+import { registerRootComponent, View, Text } from "@gluxe/react";
 
 function App() {
   return (
@@ -64,7 +62,7 @@ styling, `_hover`/`_active` states, and `transition`. See the exported
 result:
 
 ```ts
-import { invoke } from "gluxe";
+import { invoke } from "@gluxe/react";
 
 const result = await invoke<string>("plugin|command", { arg: 1 });
 ```
@@ -73,17 +71,17 @@ const result = await invoke<string>("plugin|command", { arg: 1 });
 consume with `for await` or `getReader()`:
 
 ```ts
-import { invokeStream } from "gluxe";
+import { invokeStream } from "@gluxe/react";
 
 for await (const chunk of invokeStream<string>("plugin|stream", { path })) {
   console.log(chunk);
 }
 ```
 
-The window API lives under the `gluxe/window` subpath:
+The window API lives under the `@gluxe/react/window` subpath:
 
 ```ts
-import { setWindowTitle } from "gluxe/window";
+import { setWindowTitle } from "@gluxe/react/window";
 await setWindowTitle("New title");
 ```
 
@@ -93,7 +91,7 @@ await setWindowTitle("New title");
 `Component::new("Name", ...)`) as a typed React component:
 
 ```tsx
-import { nativeComponent } from "gluxe";
+import { nativeComponent } from "@gluxe/react";
 
 const Badge = nativeComponent<{ count: number }>("Badge");
 
@@ -102,13 +100,13 @@ const Badge = nativeComponent<{ count: number }>("Badge");
 
 ## Vite plugin
 
-`gluxe/vite` reads `app.json`, bundles your entry into a single self-contained
-chunk the runtime can evaluate, and writes a manifest (entry path, window config,
-icon) into the output directory:
+`@gluxe/react/vite` reads `app.json`, bundles your entry into a single
+self-contained chunk the runtime can evaluate, and writes a manifest (entry path,
+window config, icon) into the output directory:
 
 ```ts
 import react from "@vitejs/plugin-react";
-import { gluxe } from "gluxe/vite";
+import { gluxe } from "@gluxe/react/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({ plugins: [react(), gluxe()] });

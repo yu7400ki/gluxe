@@ -13,7 +13,7 @@ user's machine.
 gluxe is early and experimental. The API will change.
 
 ```tsx
-import { View, Text } from "gluxe";
+import { View, Text } from "@gluxe/react";
 import { useState } from "react";
 
 export default function Counter() {
@@ -92,7 +92,7 @@ host). A minimal app looks like this:
 ```
 my-app/
 ├── app.json          # window + bundle configuration
-├── package.json      # depends on "gluxe" and "react"
+├── package.json      # depends on "@gluxe/react" and "react"
 ├── vite.config.ts    # uses the gluxe Vite plugin
 ├── index.tsx         # registers the root component
 ├── App.tsx           # your React UI
@@ -103,7 +103,7 @@ my-app/
 **`index.tsx`** — register your root component:
 
 ```tsx
-import { registerRootComponent } from "gluxe";
+import { registerRootComponent } from "@gluxe/react";
 import App from "./App";
 
 registerRootComponent(App);
@@ -113,7 +113,7 @@ registerRootComponent(App);
 
 ```ts
 import react from "@vitejs/plugin-react";
-import { gluxe } from "gluxe/vite";
+import { gluxe } from "@gluxe/react/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({ plugins: [react(), gluxe()] });
@@ -171,7 +171,7 @@ The browseable [`examples/`](examples/) directory contains ready-to-run apps —
 
 ### Primitives
 
-Import host elements from `gluxe` and use them as JSX:
+Import host elements from `@gluxe/react` and use them as JSX:
 
 | Element       | Description                              |
 | ------------- | ---------------------------------------- |
@@ -247,7 +247,7 @@ fn main() {
 Call them from JS with `invoke` (and `invokeStream` for streaming commands):
 
 ```ts
-import { invoke } from "gluxe";
+import { invoke } from "@gluxe/react";
 
 const message = await invoke<string>("demo|greet", { name: "world" });
 ```
@@ -288,7 +288,7 @@ const text = await fs.readTextFile("/some/file.txt");
 
 The window settings travel with the bundle, so changing them requires rebuilding
 the JS (`pnpm build` / `gluxe build`). The window title can also be changed at
-runtime via `setWindowTitle` from the `gluxe/window` export.
+runtime via `setWindowTitle` from the `@gluxe/react/window` export.
 
 For a custom titlebar, set `window.titlebar: false` and mark drag/control regions
 in JSX with the `windowControlArea` prop (`"drag"`, `"close"`, `"max"`, `"min"`).
@@ -303,7 +303,7 @@ This is a pnpm + Cargo monorepo.
 | `crates/macros`        | `gluxe-macros`                         | The `#[command]` proc-macro                        |
 | `crates/build-support` | `gluxe-build`                          | `build.rs` helper for app projects                 |
 | `plugins/fs`           | `gluxe-plugin-fs` / `@gluxe/plugin-fs` | Filesystem plugin                                  |
-| `packages/sdk`         | `gluxe`                                | JS SDK: React host config, primitives, Vite plugin |
+| `packages/react`       | `@gluxe/react`                         | JS SDK: React host config, primitives, Vite plugin |
 | `packages/router`      | `@gluxe/router`                        | File-based and code-based router                   |
 | `packages/cli`         | `@gluxe/cli`                           | The `gluxe` command-line tool                      |
 | `examples/`            | —                                      | `counter`, `file-explorer`, `othello`              |

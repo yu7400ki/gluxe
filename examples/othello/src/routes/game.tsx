@@ -1,5 +1,5 @@
+import { Text, View } from "@gluxe/react";
 import { useLocation, useNavigate } from "@gluxe/router";
-import { Text, View } from "gluxe";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BoardView } from "../components/BoardView";

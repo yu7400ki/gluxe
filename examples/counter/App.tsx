@@ -1,5 +1,5 @@
-import { View, Text } from "gluxe";
-import { setWindowTitle } from "gluxe/window";
+import { View, Text } from "@gluxe/react";
+import { setWindowTitle } from "@gluxe/react/window";
 import React, { useEffect, useState } from "react";
 
 export default function Counter() {

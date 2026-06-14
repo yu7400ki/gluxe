@@ -1,7 +1,7 @@
 import { fs } from "@gluxe/plugin-fs";
 import type { DirEntry, Metadata } from "@gluxe/plugin-fs";
-import { View, Text, Image, TextInput } from "gluxe";
-import type { GpuiKeyboardEvent } from "gluxe";
+import { View, Text, Image, TextInput } from "@gluxe/react";
+import type { GpuiKeyboardEvent } from "@gluxe/react";
 import { useState, useEffect } from "react";
 
 import fileIcon from "./src/icons/file.svg";

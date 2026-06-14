@@ -1,4 +1,4 @@
-import { View } from "gluxe";
+import { View } from "@gluxe/react";
 
 import { C, CELL } from "../theme";
 

@@ -14,7 +14,7 @@
 //   const home    = await fs.homeDir();              // home directory
 //   const abs     = await fs.canonicalize("./foo");  // absolute normalised path
 
-import { type GluxeStream, invoke, invokeStream } from "gluxe";
+import { type GluxeStream, invoke, invokeStream } from "@gluxe/react";
 
 // ---------------------------------------------------------------------------
 // Types

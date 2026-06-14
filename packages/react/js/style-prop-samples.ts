@@ -14,7 +14,7 @@ import type { BaseStyleProps } from "./primitives";
  *
  * Every sample must parse to a non-default (`Some`) value in Rust, so prefer
  * unambiguous, obviously-valid values. After editing, regenerate the fixture:
- * `pnpm -C packages/sdk test:run -- -u`
+ * `pnpm -C packages/react test:run -- -u`
  */
 export const STYLE_PROP_SAMPLES = {
   display: "grid",

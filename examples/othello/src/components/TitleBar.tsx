@@ -1,5 +1,5 @@
+import { Text, View } from "@gluxe/react";
 import { useLocation, useNavigate } from "@gluxe/router";
-import { Text, View } from "gluxe";
 
 import { C } from "../theme";
 

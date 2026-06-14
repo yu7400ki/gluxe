@@ -1,4 +1,4 @@
-import { Text, View } from "gluxe";
+import { Text, View } from "@gluxe/react";
 
 import { C } from "../theme";
 import { Button } from "./Button";

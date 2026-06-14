@@ -1,5 +1,5 @@
 {
-  "name": "gluxe",
+  "name": "@gluxe/react",
   "version": "0.1.0",
   "description": "React SDK for the gluxe desktop framework — host config, primitives, and Vite plugin.",
   "keywords": [
@@ -18,7 +18,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yu7400ki/gluxe.git",
-    "directory": "packages/sdk"
+    "directory": "packages/react"
   },
   "files": [
     "dist"
@@ -37,6 +37,9 @@
       "import": "./dist/window.mjs",
       "types": "./dist/window.d.mts"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",

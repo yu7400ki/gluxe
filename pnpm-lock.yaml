@@ -81,9 +81,9 @@ importers:
 
   examples/counter:
     dependencies:
-      gluxe:
+      '@gluxe/react':
         specifier: workspace:*
-        version: link:../../packages/sdk
+        version: link:../../packages/react
       react:
         specifier: catalog:prod
         version: 19.2.6
@@ -109,9 +109,9 @@ importers:
       '@gluxe/plugin-fs':
         specifier: workspace:*
         version: link:../../plugins/fs
-      gluxe:
+      '@gluxe/react':
         specifier: workspace:*
-        version: link:../../packages/sdk
+        version: link:../../packages/react
       react:
         specifier: catalog:prod
         version: 19.2.6
@@ -134,12 +134,12 @@ importers:
 
   examples/othello:
     dependencies:
+      '@gluxe/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@gluxe/router':
         specifier: workspace:*
         version: link:../../packages/router
-      gluxe:
-        specifier: workspace:*
-        version: link:../../packages/sdk
       react:
         specifier: catalog:prod
         version: 19.2.6
@@ -197,50 +197,7 @@ importers:
         specifier: catalog:lint
         version: 1.69.0
 
-  packages/router:
-    dependencies:
-      gluxe:
-        specifier: workspace:*
-        version: link:../sdk
-    devDependencies:
-      '@gluxe/config':
-        specifier: workspace:*
-        version: link:../config
-      '@types/node':
-        specifier: catalog:types
-        version: 22.19.19
-      '@types/react':
-        specifier: catalog:types
-        version: 19.2.15
-      '@types/react-dom':
-        specifier: catalog:types
-        version: 19.2.3(@types/react@19.2.15)
-      jsdom:
-        specifier: catalog:test
-        version: 26.1.0
-      oxlint:
-        specifier: catalog:lint
-        version: 1.69.0
-      react:
-        specifier: catalog:prod
-        version: 19.2.6
-      react-dom:
-        specifier: catalog:test
-        version: 19.2.6(react@19.2.6)
-      tsdown:
-        specifier: catalog:build
-        version: 0.22.1(typescript@6.0.3)
-      typescript:
-        specifier: catalog:build
-        version: 6.0.3
-      vite:
-        specifier: catalog:build
-        version: 8.0.16(@types/node@22.19.19)
-      vitest:
-        specifier: catalog:test
-        version: 4.1.8(@types/node@22.19.19)(jsdom@26.1.0)(vite@8.0.16(@types/node@22.19.19))
-
-  packages/sdk:
+  packages/react:
     dependencies:
       react:
         specifier: catalog:prod
@@ -280,11 +237,54 @@ importers:
         specifier: catalog:test
         version: 4.1.8(@types/node@22.19.19)(jsdom@26.1.0)(vite@8.0.16(@types/node@22.19.19))
 
+  packages/router:
+    dependencies:
+      '@gluxe/react':
+        specifier: workspace:*
+        version: link:../react
+    devDependencies:
+      '@gluxe/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: catalog:types
+        version: 22.19.19
+      '@types/react':
+        specifier: catalog:types
+        version: 19.2.15
+      '@types/react-dom':
+        specifier: catalog:types
+        version: 19.2.3(@types/react@19.2.15)
+      jsdom:
+        specifier: catalog:test
+        version: 26.1.0
+      oxlint:
+        specifier: catalog:lint
+        version: 1.69.0
+      react:
+        specifier: catalog:prod
+        version: 19.2.6
+      react-dom:
+        specifier: catalog:test
+        version: 19.2.6(react@19.2.6)
+      tsdown:
+        specifier: catalog:build
+        version: 0.22.1(typescript@6.0.3)
+      typescript:
+        specifier: catalog:build
+        version: 6.0.3
+      vite:
+        specifier: catalog:build
+        version: 8.0.16(@types/node@22.19.19)
+      vitest:
+        specifier: catalog:test
+        version: 4.1.8(@types/node@22.19.19)(jsdom@26.1.0)(vite@8.0.16(@types/node@22.19.19))
+
   plugins/fs:
     dependencies:
-      gluxe:
+      '@gluxe/react':
         specifier: workspace:*
-        version: link:../../packages/sdk
+        version: link:../../packages/react
     devDependencies:
       '@gluxe/config':
         specifier: workspace:*

@@ -1,4 +1,4 @@
-import { View, type GpuiMouseEvent, type ViewProps } from "gluxe";
+import { View, type GpuiMouseEvent, type ViewProps } from "@gluxe/react";
 import React, { useContext } from "react";
 
 import { RouteContext } from "./context";
