@@ -14,6 +14,10 @@ export type {
   GpuiFocusEvent,
   EventProps,
   TextChangeHandler,
+  FloatingProps,
+  FloatingArea,
+  FloatingSide,
+  FloatingAlign,
 } from "./primitives";
 export { registerRootComponent } from "./runtime";
 export { nativeComponent } from "./native";

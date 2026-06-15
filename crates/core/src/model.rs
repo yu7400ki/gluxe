@@ -52,6 +52,81 @@ impl OverflowMode {
     }
 }
 
+/// Which side of the anchor the floating element is placed on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum FloatingSide {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+impl FloatingSide {
+    pub(crate) fn parse(s: &str) -> Option<Self> {
+        match s {
+            "top" => Some(Self::Top),
+            "bottom" => Some(Self::Bottom),
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            _ => None,
+        }
+    }
+}
+
+/// Alignment of the floating element along the anchor's cross axis.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum FloatingAlign {
+    Start,
+    Center,
+    End,
+}
+
+impl FloatingAlign {
+    pub(crate) fn parse(s: &str) -> Option<Self> {
+        match s {
+            "start" => Some(Self::Start),
+            "center" => Some(Self::Center),
+            "end" => Some(Self::End),
+            _ => None,
+        }
+    }
+}
+
+/// Parse a floating `area` string: `"<side>"` or `"<side> <align>"`.
+/// First whitespace-separated token = side, optional second = align.
+/// Missing/unknown side → default `Bottom`; missing/unknown align → default `Start`.
+pub(crate) fn parse_floating_area(s: &str) -> (FloatingSide, FloatingAlign) {
+    let mut tokens = s.split_whitespace();
+    let side = tokens
+        .next()
+        .and_then(FloatingSide::parse)
+        .unwrap_or(FloatingSide::Bottom);
+    let align = tokens
+        .next()
+        .and_then(FloatingAlign::parse)
+        .unwrap_or(FloatingAlign::Start);
+    (side, align)
+}
+
+/// Positioning spec for a floating element bound to a named anchor.
+///
+/// Placement is resolved against the anchor's last-painted bounds and clamped to
+/// the window (no opposite-side flip — overflow is handled by snapping, matching
+/// GPUI's `anchored`).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct FloatingSpec {
+    /// The `anchorName` this floating element binds to.
+    pub(crate) anchor: String,
+    pub(crate) side: FloatingSide,
+    pub(crate) align: FloatingAlign,
+    /// Gap from the anchor along the `side` direction (px/rem; `%`/`auto` ignored).
+    pub(crate) offset: LengthValue,
+    /// Minimum gap kept from the window edge when snapping on overflow (px/rem).
+    pub(crate) margin: LengthValue,
+    /// Draw-order priority among floating layers. `None` = leave GPUI default.
+    pub(crate) priority: Option<u16>,
+}
+
 /// Parse the `windowControlArea` prop value into a GPUI [`WindowControlArea`].
 ///
 /// Maps the four JS string values used in `<View windowControlArea="…">` to their
@@ -242,6 +317,10 @@ pub(crate) struct Props {
     /// Custom-titlebar hit-test region. `None` = ordinary content. On Windows the
     /// OS handles the NCHITTEST; on macOS/Linux `render.rs` attaches framework handlers.
     pub(crate) window_control_area: Option<WindowControlArea>,
+    /// Marks this element as a named anchor that floating elements can bind to.
+    pub(crate) anchor_name: Option<String>,
+    /// Positions this element relative to a named anchor (floating overlay).
+    pub(crate) floating: Option<FloatingSpec>,
 }
 
 /// Which JS event handlers an element has registered.
@@ -681,6 +760,98 @@ mod tests {
         s.overflow_x = Some(OverflowMode::Hidden);
         s.overflow_y = Some(OverflowMode::Hidden);
         assert!(!s.scrolls());
+    }
+
+    // ---- FloatingSide::parse ----
+
+    #[test]
+    fn floating_side_known_values() {
+        assert_eq!(FloatingSide::parse("top"), Some(FloatingSide::Top));
+        assert_eq!(FloatingSide::parse("bottom"), Some(FloatingSide::Bottom));
+        assert_eq!(FloatingSide::parse("left"), Some(FloatingSide::Left));
+        assert_eq!(FloatingSide::parse("right"), Some(FloatingSide::Right));
+    }
+
+    #[test]
+    fn floating_side_unknown_returns_none() {
+        assert!(FloatingSide::parse("center").is_none());
+        assert!(FloatingSide::parse("Top").is_none());
+        assert!(FloatingSide::parse("").is_none());
+    }
+
+    // ---- FloatingAlign::parse ----
+
+    #[test]
+    fn floating_align_known_values() {
+        assert_eq!(FloatingAlign::parse("start"), Some(FloatingAlign::Start));
+        assert_eq!(FloatingAlign::parse("center"), Some(FloatingAlign::Center));
+        assert_eq!(FloatingAlign::parse("end"), Some(FloatingAlign::End));
+    }
+
+    #[test]
+    fn floating_align_unknown_returns_none() {
+        assert!(FloatingAlign::parse("middle").is_none());
+        assert!(FloatingAlign::parse("Start").is_none());
+        assert!(FloatingAlign::parse("").is_none());
+    }
+
+    // ---- parse_floating_area ----
+
+    #[test]
+    fn floating_area_bottom_start() {
+        assert_eq!(
+            parse_floating_area("bottom start"),
+            (FloatingSide::Bottom, FloatingAlign::Start)
+        );
+    }
+
+    #[test]
+    fn floating_area_side_only_defaults_align_to_start() {
+        assert_eq!(
+            parse_floating_area("bottom"),
+            (FloatingSide::Bottom, FloatingAlign::Start)
+        );
+    }
+
+    #[test]
+    fn floating_area_top_end() {
+        assert_eq!(
+            parse_floating_area("top end"),
+            (FloatingSide::Top, FloatingAlign::End)
+        );
+    }
+
+    #[test]
+    fn floating_area_empty_defaults_to_bottom_start() {
+        assert_eq!(
+            parse_floating_area(""),
+            (FloatingSide::Bottom, FloatingAlign::Start)
+        );
+    }
+
+    #[test]
+    fn floating_area_garbage_defaults_to_bottom_start() {
+        assert_eq!(
+            parse_floating_area("garbage"),
+            (FloatingSide::Bottom, FloatingAlign::Start)
+        );
+    }
+
+    #[test]
+    fn floating_area_left_center() {
+        assert_eq!(
+            parse_floating_area("left center"),
+            (FloatingSide::Left, FloatingAlign::Center)
+        );
+    }
+
+    #[test]
+    fn floating_area_unknown_align_falls_back_to_start() {
+        // An unrecognized align token → defaults to Start.
+        assert_eq!(
+            parse_floating_area("left middle"),
+            (FloatingSide::Left, FloatingAlign::Start)
+        );
     }
 
     // ---- apply_command — helpers (shared with sequence_tests below) ----

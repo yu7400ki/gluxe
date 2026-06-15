@@ -4,7 +4,7 @@ use gpui::Rgba;
 use super::color::parse_color;
 use super::reader::{PropReader, length_from_value};
 use crate::anim::{Easing, TransitionProperty, TransitionSpec, field_id_from_name};
-use crate::model::{Props, StyleFields};
+use crate::model::{FloatingSpec, LengthValue, Props, StyleFields, parse_floating_area};
 
 // ---------------------------------------------------------------------------
 // Composite-field presence tracking
@@ -330,6 +330,54 @@ fn parse_transitions(value: &JsValue, ctx: &mut JsContext) -> Vec<TransitionSpec
 }
 
 // ---------------------------------------------------------------------------
+// Floating prop parsing
+// ---------------------------------------------------------------------------
+
+/// Parse the top-level `floating` prop object into a [`FloatingSpec`].
+/// Returns `None` when the value is not an object or when the required `anchor`
+/// sub-key is absent or not a string.
+fn parse_floating(obj: &JsObject, ctx: &mut JsContext) -> Option<FloatingSpec> {
+    let floating_val = obj.get(js_string!("floating"), ctx).ok()?;
+    let floating_obj = floating_val.as_object()?;
+
+    let anchor = str_of(&floating_obj.get(js_string!("anchor"), ctx).ok()?)?;
+
+    let (side, align) = floating_obj
+        .get(js_string!("area"), ctx)
+        .ok()
+        .and_then(|v| str_of(&v))
+        .map(|s| parse_floating_area(&s))
+        .unwrap_or_else(|| parse_floating_area(""));
+
+    let offset = floating_obj
+        .get(js_string!("offset"), ctx)
+        .ok()
+        .and_then(|v| length_from_value(&v))
+        .unwrap_or(LengthValue::Px(0.0));
+
+    let margin = floating_obj
+        .get(js_string!("margin"), ctx)
+        .ok()
+        .and_then(|v| length_from_value(&v))
+        .unwrap_or(LengthValue::Px(0.0));
+
+    let priority = floating_obj
+        .get(js_string!("priority"), ctx)
+        .ok()
+        .and_then(|v| f32_of(&v))
+        .map(|n| n as u16);
+
+    Some(FloatingSpec {
+        anchor,
+        side,
+        align,
+        offset,
+        margin,
+        priority,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
@@ -382,6 +430,8 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
             .str_val("windowControlArea", ctx)
             .as_deref()
             .and_then(crate::model::parse_window_control_area),
+        anchor_name: obj_reader.str_val("anchorName", ctx),
+        floating: parse_floating(obj, ctx),
         // Events are populated separately from the third bridge argument.
         ..Props::default()
     }
@@ -390,7 +440,7 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{LengthValue, OverflowMode};
+    use crate::model::{FloatingAlign, FloatingSide, FloatingSpec, LengthValue, OverflowMode};
 
     /// Evaluate a JS object-literal expression and run it through `parse_props`.
     fn props_from_js(src: &str) -> Props {
@@ -561,6 +611,83 @@ mod tests {
     fn window_control_area_absent_gives_none() {
         let p = props_from_js("({ width: 10 })");
         assert!(p.window_control_area.is_none());
+    }
+
+    // ---- anchorName prop ----
+
+    #[test]
+    fn anchor_name_parsed_from_top_level() {
+        let p = props_from_js("({ anchorName: 'trigger-1' })");
+        assert_eq!(p.anchor_name, Some("trigger-1".to_string()));
+        assert!(p.floating.is_none());
+    }
+
+    // ---- floating prop ----
+
+    #[test]
+    fn floating_all_fields_parsed() {
+        let p = props_from_js(
+            "({ floating: { anchor: 'a', area: 'top end', offset: 8, margin: 12, priority: 3 } })",
+        );
+        assert_eq!(
+            p.floating,
+            Some(FloatingSpec {
+                anchor: "a".to_string(),
+                side: FloatingSide::Top,
+                align: FloatingAlign::End,
+                offset: LengthValue::Px(8.0),
+                margin: LengthValue::Px(12.0),
+                priority: Some(3),
+            })
+        );
+    }
+
+    #[test]
+    fn floating_offset_margin_accept_units() {
+        // Strings carry units; `%`/`auto` parse but are ignored at render time.
+        let p = props_from_js("({ floating: { anchor: 'a', offset: '0.5rem', margin: '8px' } })");
+        let f = p.floating.unwrap();
+        assert_eq!(f.offset, LengthValue::Rem(0.5));
+        assert_eq!(f.margin, LengthValue::Px(8.0));
+    }
+
+    #[test]
+    fn floating_center_align_parsed() {
+        let p = props_from_js("({ floating: { anchor: 'a', area: 'right center' } })");
+        let f = p.floating.unwrap();
+        assert_eq!(f.side, FloatingSide::Right);
+        assert_eq!(f.align, FloatingAlign::Center);
+    }
+
+    #[test]
+    fn floating_defaults_when_only_anchor_given() {
+        let p = props_from_js("({ floating: { anchor: 'a' } })");
+        assert_eq!(
+            p.floating,
+            Some(FloatingSpec {
+                anchor: "a".to_string(),
+                side: FloatingSide::Bottom,
+                align: FloatingAlign::Start,
+                offset: LengthValue::Px(0.0),
+                margin: LengthValue::Px(0.0),
+                priority: None,
+            })
+        );
+    }
+
+    #[test]
+    fn floating_without_anchor_gives_none() {
+        // No `anchor` key → the whole floating spec is dropped.
+        let p = props_from_js("({ floating: { area: 'bottom' } })");
+        assert!(p.floating.is_none());
+    }
+
+    #[test]
+    fn floating_area_bottom_only_gives_bottom_start() {
+        let p = props_from_js("({ floating: { anchor: 'a', area: 'bottom' } })");
+        let f = p.floating.unwrap();
+        assert_eq!(f.side, FloatingSide::Bottom);
+        assert_eq!(f.align, FloatingAlign::Start);
     }
 
     /// Fixture is generated from `packages/react/js/style-prop-samples.ts` via
