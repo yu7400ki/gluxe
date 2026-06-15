@@ -201,6 +201,10 @@ const hostConfig = {
     // Rust side flushes on its own run_jobs tick.
   },
 
+  // Called by the reconciler when mounting a portal (`createPortal`). Portals
+  // share the existing root container, so there is nothing to prepare.
+  preparePortalMount(_containerInfo: Container): void {},
+
   appendChild(parentInstance: Instance, child: Instance): void {
     bridge.appendChild(parentInstance.id, child.id);
   },

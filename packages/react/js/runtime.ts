@@ -46,3 +46,23 @@ export function registerRootComponent(AppComponent: React.ComponentType<unknown>
 
   reconciler.updateContainer(React.createElement(AppComponent, null), container, null, null);
 }
+
+/**
+ * Render `children` into the window root rather than the caller's tree position
+ * (gluxe's `createPortal`). Children become siblings of the app's root content —
+ * escaping ancestor layout, overflow clipping, and stacking — while React state,
+ * context, and handlers stay intact. For modals/dialogs/toasts; pair with
+ * `position: "absolute", inset: 0` for a full-window overlay.
+ */
+export function createPortal(children: React.ReactNode, key?: string): React.ReactPortal {
+  // Share the single root container with the app's main content (as react-dom
+  // portals share `document.body`); `clearContainer` is HostRoot-only, so this
+  // never wipes app content. Cast bridges react-reconciler's `ReactPortal` to
+  // React's — the runtime value is a valid portal either way.
+  return getReconciler().createPortal(
+    children,
+    rootContainer,
+    null,
+    key ?? null,
+  ) as unknown as React.ReactPortal;
+}

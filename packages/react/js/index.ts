@@ -20,7 +20,7 @@ export type {
   FloatingSide,
   FloatingAlign,
 } from "./primitives";
-export { registerRootComponent } from "./runtime";
+export { createPortal, registerRootComponent } from "./runtime";
 export { nativeComponent } from "./native";
 export type { NativeComponentProps } from "./native";
 export { invoke } from "./invoke";
