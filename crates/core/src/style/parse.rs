@@ -418,8 +418,7 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
         .as_ref()
         .and_then(|s| s.get(js_string!("_focusVisible"), ctx).ok())
         .and_then(|value| value.as_object());
-    let focus_visible_style =
-        focus_visible_obj.map(|fo| Box::new(parse_style_fields(&[&fo], ctx)));
+    let focus_visible_style = focus_visible_obj.map(|fo| Box::new(parse_style_fields(&[&fo], ctx)));
 
     // Transitions come from `style` only (never top-level, never `_hover`/`_active`).
     let transitions = style_obj
@@ -584,8 +583,7 @@ mod tests {
 
     #[test]
     fn focus_pseudo_selectors_parse_independently() {
-        let p =
-            props_from_js("({ style: { _focus: { width: 3 }, _focusVisible: { width: 5 } } })");
+        let p = props_from_js("({ style: { _focus: { width: 3 }, _focusVisible: { width: 5 } } })");
         assert_eq!(
             p.focus_style.as_ref().map(|f| f.width),
             Some(Some(LengthValue::Px(3.0)))

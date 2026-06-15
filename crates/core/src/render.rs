@@ -267,9 +267,11 @@ macro_rules! attach_focus {
         let want_focus = props.events.focus;
         let want_blur = props.events.blur;
         let changed = FOCUS_SUBSCRIPTIONS.with(|subs| {
-            subs.borrow().get(&eid).map_or(want_focus || want_blur, |s| {
-                s.focus != want_focus || s.blur != want_blur
-            })
+            subs.borrow()
+                .get(&eid)
+                .map_or(want_focus || want_blur, |s| {
+                    s.focus != want_focus || s.blur != want_blur
+                })
         });
         if changed {
             if want_focus || want_blur {
@@ -778,8 +780,7 @@ impl RootView {
     /// instead of the first stop. The anchor is kept current by `render`. Restoring
     /// then `focus_next` fires no spurious events — gpui coalesces focus per frame.
     fn resume_focus_anchor(&self, window: &mut Window, cx: &mut App) {
-        let on_real_element =
-            window.focused(cx).is_some() && !self.focus_handle.is_focused(window);
+        let on_real_element = window.focused(cx).is_some() && !self.focus_handle.is_focused(window);
         if !on_real_element {
             if let Some(prev) = crate::state::focus_anchor() {
                 if let Some(handle) = crate::state::get_focus_handle(prev, cx) {
