@@ -408,6 +408,19 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
         .and_then(|value| value.as_object());
     let active = active_obj.map(|ao| Box::new(parse_style_fields(&[&ao], ctx)));
 
+    let focus_obj = style_obj
+        .as_ref()
+        .and_then(|s| s.get(js_string!("_focus"), ctx).ok())
+        .and_then(|value| value.as_object());
+    let focus_style = focus_obj.map(|fo| Box::new(parse_style_fields(&[&fo], ctx)));
+
+    let focus_visible_obj = style_obj
+        .as_ref()
+        .and_then(|s| s.get(js_string!("_focusVisible"), ctx).ok())
+        .and_then(|value| value.as_object());
+    let focus_visible_style =
+        focus_visible_obj.map(|fo| Box::new(parse_style_fields(&[&fo], ctx)));
+
     // Transitions come from `style` only (never top-level, never `_hover`/`_active`).
     let transitions = style_obj
         .as_ref()
@@ -420,6 +433,10 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
     Props {
         hover,
         active,
+        focus_style,
+        focus_visible_style,
+        tab_index: obj_reader.i32_val("tabIndex", ctx),
+        tab_stop: obj_reader.bool_val("tabStop", ctx),
         style,
         transitions,
         src: obj_reader.str_val("src", ctx),
@@ -563,6 +580,49 @@ mod tests {
             p.active.as_ref().map(|a| a.width),
             Some(Some(LengthValue::Px(9.0)))
         );
+    }
+
+    #[test]
+    fn focus_pseudo_selectors_parse_independently() {
+        let p =
+            props_from_js("({ style: { _focus: { width: 3 }, _focusVisible: { width: 5 } } })");
+        assert_eq!(
+            p.focus_style.as_ref().map(|f| f.width),
+            Some(Some(LengthValue::Px(3.0)))
+        );
+        assert_eq!(
+            p.focus_visible_style.as_ref().map(|f| f.width),
+            Some(Some(LengthValue::Px(5.0)))
+        );
+        assert!(p.is_focusable());
+    }
+
+    // ---- tabIndex / tabStop props ----
+
+    #[test]
+    fn tab_index_parses_and_implies_focusable() {
+        let p = props_from_js("({ tabIndex: 2 })");
+        assert_eq!(p.tab_index, Some(2));
+        assert!(p.is_focusable());
+    }
+
+    #[test]
+    fn negative_tab_index_parses() {
+        let p = props_from_js("({ tabIndex: -1 })");
+        assert_eq!(p.tab_index, Some(-1));
+        assert!(p.is_focusable());
+    }
+
+    #[test]
+    fn tab_stop_parses() {
+        let p = props_from_js("({ tabIndex: 0, tabStop: false })");
+        assert_eq!(p.tab_stop, Some(false));
+    }
+
+    #[test]
+    fn no_focus_props_is_not_focusable() {
+        let p = props_from_js("({ style: { width: 10 } })");
+        assert!(!p.is_focusable());
     }
 
     // ---- windowControlArea prop ----

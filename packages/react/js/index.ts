@@ -8,6 +8,7 @@ export type {
   TransitionValue,
   TransitionEasing,
   HostType,
+  GpuiInstance,
   GpuiEventBase,
   GpuiMouseEvent,
   GpuiKeyboardEvent,

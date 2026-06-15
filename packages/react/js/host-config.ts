@@ -5,15 +5,31 @@
 // Rust stores only bool flags (which events are registered) and calls
 // globalThis.__dispatchEvent(id, type, payload) when a GPUI event fires.
 
+import { invoke } from "./invoke";
 import type { GpuiFocusEvent, GpuiKeyboardEvent, GpuiMouseEvent } from "./primitives";
 
 const DefaultEventPriority = 32; // React 19 lane value (was 16 in React 18)
 
 let currentUpdatePriority = 0;
 
-// Lightweight wrapper carrying the Rust-side ElementId.
+// Lightweight wrapper carrying the Rust-side ElementId. Exposed to React as the
+// `ref` value (via `getPublicInstance`), so `ref.current.focus()` works.
 interface Instance {
   id: number;
+  /** Move keyboard focus to this element. No-op unless the element is focusable
+   *  (has `tabIndex`, `onKeyDown`, `onFocus`/`onBlur`, `autoFocus`, or `_focus*`). */
+  focus(): Promise<void>;
+  /** Remove keyboard focus from this element (only if it currently holds focus). */
+  blur(): Promise<void>;
+}
+
+/** Build the public instance for an ElementId, wiring the focus/blur ref methods. */
+function makeInstance(id: number): Instance {
+  return {
+    id,
+    focus: () => invoke<void>("__focus|focus", { id }),
+    blur: () => invoke<void>("__focus|blur", { id }),
+  };
 }
 
 type Container = { readonly root: true }; // opaque non-null root container
@@ -129,7 +145,7 @@ const hostConfig = {
     const { plain, events, map } = extractHandlers(props);
     const id = bridge.createInstance(type, plain, events);
     if (events.length > 0) handlers.set(id, map);
-    return { id };
+    return makeInstance(id);
   },
 
   createTextInstance(
@@ -139,7 +155,7 @@ const hostConfig = {
     _internalInstanceHandle: unknown,
   ): Instance {
     const id = bridge.createText(text);
-    return { id };
+    return makeInstance(id);
   },
 
   appendInitialChild(parentInstance: Instance, child: Instance): void {

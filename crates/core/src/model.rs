@@ -304,6 +304,15 @@ pub(crate) struct Props {
     pub(crate) hover: Option<Box<StyleFields>>,
     /// Override styles while pressed (`:active`). Requires a stable element id.
     pub(crate) active: Option<Box<StyleFields>>,
+    /// Override styles while the element holds keyboard focus (`:focus`). Requires `track_focus`.
+    pub(crate) focus_style: Option<Box<StyleFields>>,
+    /// Override styles while focused *via the keyboard* (`:focus-visible`). Requires `track_focus`.
+    pub(crate) focus_visible_style: Option<Box<StyleFields>>,
+    /// Tab order index (HTML `tabIndex`). `Some(n)` makes the element focusable;
+    /// `n >= 0` joins the Tab order, `n < 0` is programmatically focusable only.
+    pub(crate) tab_index: Option<i32>,
+    /// Explicit `tabStop` override. `None` → derived from `tab_index` (n>=0 = stop).
+    pub(crate) tab_stop: Option<bool>,
     pub(crate) src: Option<String>,         // for Image elements
     pub(crate) value: Option<String>,       // for TextInput elements (controlled value)
     pub(crate) placeholder: Option<String>, // for TextInput elements
@@ -323,6 +332,21 @@ pub(crate) struct Props {
     pub(crate) floating: Option<FloatingSpec>,
 }
 
+impl Props {
+    /// Whether this element needs a `FocusHandle` / `track_focus` — true for any
+    /// focus-related prop (`onKeyDown`/`onFocus`/`onBlur`/`autoFocus`/`tabIndex`/
+    /// `_focus`/`_focusVisible`). Shared by `focusable_ids` tracking and `render.rs`.
+    pub(crate) fn is_focusable(&self) -> bool {
+        self.events.keydown
+            || self.events.focus
+            || self.events.blur
+            || self.autofocus
+            || self.tab_index.is_some()
+            || self.focus_style.is_some()
+            || self.focus_visible_style.is_some()
+    }
+}
+
 /// Which JS event handlers an element has registered.
 ///
 /// Only presence flags are stored in Rust; the actual JS functions live in the
@@ -336,6 +360,10 @@ pub(crate) struct Events {
     pub(crate) mouseenter: bool,
     pub(crate) mouseleave: bool,
     pub(crate) keydown: bool,
+    /// `onFocus` — element gained keyboard focus (View/Image; TextInput uses its own path).
+    pub(crate) focus: bool,
+    /// `onBlur` — element lost keyboard focus.
+    pub(crate) blur: bool,
 }
 
 impl Events {
@@ -347,6 +375,8 @@ impl Events {
             || self.mouseenter
             || self.mouseleave
             || self.keydown
+            || self.focus
+            || self.blur
     }
 
     pub(crate) fn from_types(types: &[String]) -> Self {
@@ -360,6 +390,8 @@ impl Events {
                 "mouseenter" => events.mouseenter = true,
                 "mouseleave" => events.mouseleave = true,
                 "keydown" => events.keydown = true,
+                "focus" => events.focus = true,
+                "blur" => events.blur = true,
                 _ => {}
             }
         }
@@ -396,7 +428,7 @@ pub(crate) struct Tree {
     /// A node's kind never changes, so this set only grows on create and shrinks on detach.
     pub(crate) text_input_ids: FxHashSet<ElementId>,
     /// Incrementally maintained index of keyboard-focusable node ids → `autofocus` flag.
-    /// A node is focusable when it has `onKeyDown` or `autoFocus`; toggled by `UpdateProps`.
+    /// A node is focusable per [`Props::is_focusable`]; toggled by `UpdateProps`.
     pub(crate) focusable_ids: FxHashMap<ElementId, bool>,
 }
 
@@ -490,7 +522,7 @@ pub(crate) fn apply_command(tree: &mut Tree, cmd: UICommand) -> ApplyOutcome {
             if matches!(kind, ElementKind::TextInput) {
                 tree.text_input_ids.insert(id);
             }
-            if props.events.keydown || props.autofocus {
+            if props.is_focusable() {
                 tree.focusable_ids.insert(id, props.autofocus);
             }
             tree.nodes.insert(
@@ -584,8 +616,8 @@ pub(crate) fn apply_command(tree: &mut Tree, cmd: UICommand) -> ApplyOutcome {
                 if element.props == props {
                     return outcome;
                 }
-                // onKeyDown/autoFocus can be added or removed, so recompute on every update.
-                if props.events.keydown || props.autofocus {
+                // Focus-related props can be added or removed, so recompute on every update.
+                if props.is_focusable() {
                     tree.focusable_ids.insert(id, props.autofocus);
                 } else {
                     tree.focusable_ids.remove(&id);

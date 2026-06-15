@@ -493,14 +493,20 @@ impl Render for TextInputState {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Read style/value/placeholder from the tree. Build the styled div inside the
         // borrow so `StyleFields` is applied by reference rather than cloned each frame.
-        let (ext_value, ext_placeholder, base) =
+        let (ext_value, ext_placeholder, tab_index, tab_stop, base) =
             with_tree(|tree| match tree.nodes.get(&self.element_id) {
                 Some(e) => (
                     e.props.value.clone(),
                     e.props.placeholder.clone(),
+                    e.props.tab_index,
+                    // A bare <TextInput> is keyboard-reachable by default; `tabStop`
+                    // overrides, and `tabIndex < 0` opts out of the Tab order.
+                    e.props
+                        .tab_stop
+                        .unwrap_or_else(|| e.props.tab_index.map_or(true, |i| i >= 0)),
                     apply_style_props(div(), &e.props.style),
                 ),
-                None => (None, None, div()),
+                None => (None, None, None, true, div()),
             });
 
         // Controlled-value sync: adopt external changes but ignore our own echo.
@@ -523,8 +529,16 @@ impl Render for TextInputState {
             self.placeholder = p.into();
         }
 
+        // Configure the tab order on the FocusHandle (gpui reads tab_index/tab_stop
+        // from the tracked handle, not the element — see render.rs attach_focus!).
+        let mut focus_handle = self.focus_handle(cx);
+        if let Some(idx) = tab_index {
+            focus_handle = focus_handle.tab_index(idx as isize);
+        }
+        focus_handle = focus_handle.tab_stop(tab_stop);
+
         base.key_context("TextInput")
-            .track_focus(&self.focus_handle(cx))
+            .track_focus(&focus_handle)
             .cursor(CursorStyle::IBeam)
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))

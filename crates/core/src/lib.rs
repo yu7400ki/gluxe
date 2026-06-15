@@ -77,11 +77,12 @@ use gpui::{
 use gpui_platform::application;
 
 use crate::{
-    render::RootView,
+    render::{FocusNext, FocusPrev, ROOT_KEY_CONTEXT, RootView},
     state::{
-        arm_next_timer, clock_now_ms, flush_commands, raf_frame_fired, raf_try_arm,
-        resolve_pending_invokes, resolve_pending_streams, run_boa_jobs, run_raf_callbacks,
-        set_bg_executor, set_boa, take_frame_fired, take_window_commands, wake_receiver,
+        arm_next_timer, clock_now_ms, flush_commands, get_focus_handle, raf_frame_fired,
+        raf_try_arm, resolve_pending_invokes, resolve_pending_streams, run_boa_jobs,
+        run_raf_callbacks, set_bg_executor, set_boa, take_frame_fired, take_pending_focus,
+        take_window_commands, wake_receiver,
     },
     text_input::{
         Backspace, Copy as CopyAction, Cut, Delete, End, Enter, Home, Left, Paste, Right,
@@ -473,6 +474,12 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                 KeyBinding::new("cmd-x", Cut, Some("TextInput")),
                 KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
             ]);
+            // Tab navigation, handled by the root's `on_action`. Scoped to the root
+            // key context so a deeper context (e.g. "TextInput") can override `tab`.
+            cx.bind_keys([
+                KeyBinding::new("tab", FocusNext, Some(ROOT_KEY_CONTEXT)),
+                KeyBinding::new("shift-tab", FocusPrev, Some(ROOT_KEY_CONTEXT)),
+            ]);
             // Real HTTP client for remote `<Image src="https://..."/>`; without
             // it GPUI's NullHttpClient silently drops every URI load. Behind the
             // `http` feature so apps without remote images skip the TLS deps.
@@ -509,7 +516,7 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                         icon: window_icon,
                         ..Default::default()
                     },
-                    |_, cx| cx.new(|_| RootView),
+                    |_, cx| cx.new(RootView::new),
                 )
                 .unwrap();
             cx.activate(true);
@@ -560,19 +567,51 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                             }
                         });
                     }
-                    // Drain dynamic window commands (e.g. setWindowTitle) queued
-                    // by plugin handlers. Placed after outcome so a title change
-                    // that arrives in the same pass as a re-render still applies.
+                    // Drain window commands (e.g. setWindowTitle) and deferred-focus
+                    // retries. After outcome so a change in the same pass still applies.
                     let window_cmds = take_window_commands();
-                    if !window_cmds.is_empty() {
-                        let _ = root.update(cx, |_, window, _| {
+                    let pending_focus = take_pending_focus();
+                    if !window_cmds.is_empty() || !pending_focus.is_empty() {
+                        let _ = root.update(cx, |_, window, cx| {
+                            // Retry focus once the handle has been painted.
+                            for (id, retries_left) in pending_focus {
+                                if let Some(handle) = get_focus_handle(id) {
+                                    window.focus(&handle, cx);
+                                } else if retries_left > 0 {
+                                    state::defer_focus(id, retries_left - 1);
+                                }
+                            }
                             for cmd in window_cmds {
                                 match cmd {
                                     state::WindowCommand::SetTitle(t) => {
                                         window.set_window_title(&t);
                                     }
+                                    state::WindowCommand::FocusElement(id) => {
+                                        if let Some(handle) = get_focus_handle(id) {
+                                            window.focus(&handle, cx);
+                                        } else {
+                                            // Not painted yet (e.g. focus on mount) — retry.
+                                            state::defer_focus(id, state::FOCUS_RETRY_BUDGET);
+                                        }
+                                    }
+                                    state::WindowCommand::BlurElement(id) => {
+                                        // Blur only if this element holds focus, so it
+                                        // can't steal focus from a sibling.
+                                        if get_focus_handle(id)
+                                            .is_some_and(|h| h.is_focused(window))
+                                        {
+                                            window.blur();
+                                        }
+                                    }
                                 }
                             }
+                        });
+                    }
+                    // Re-run after the next frame to retry focus once handles are painted.
+                    if state::has_pending_focus() {
+                        let _ = root.update(cx, |_, window, cx| {
+                            window.on_next_frame(|_, _| state::signal_wake());
+                            cx.notify();
                         });
                     }
                     // Hook the next GPUI frame for pending rAF callbacks. After

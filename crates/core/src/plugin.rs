@@ -28,6 +28,7 @@ use std::{
 
 use serde_json::Value;
 
+use crate::model::ElementId;
 use crate::state::{WindowCommand, push_window_command, signal_stream_wake};
 
 // ---------------------------------------------------------------------------
@@ -316,13 +317,38 @@ fn builtin_window_plugin() -> Plugin {
         .build()
 }
 
+/// Read a required numeric `id` argument as an [`ElementId`].
+fn require_id(args: &Value, cmd: &str) -> Result<ElementId, String> {
+    args["id"]
+        .as_u64()
+        .ok_or_else(|| format!("{cmd}: missing numeric `id` argument"))
+}
+
+/// Built-in "__focus" plugin: programmatic focus control (the `ref.focus()` /
+/// `ref.blur()` JS methods dispatch here). Reserved `__` namespace, like `__window`.
+fn builtin_focus_plugin() -> Plugin {
+    PluginBuilder::builtin("__focus")
+        .command("focus", |args| {
+            let id = require_id(&args, "__focus|focus")?;
+            push_window_command(WindowCommand::FocusElement(id));
+            Ok(Value::Null)
+        })
+        .command("blur", |args| {
+            let id = require_id(&args, "__focus|blur")?;
+            push_window_command(WindowCommand::BlurElement(id));
+            Ok(Value::Null)
+        })
+        .build()
+}
+
 /// Insert all plugins' commands into `COMMANDS`. Called from `run` before eval.
 /// Built-ins own the reserved `__` namespace, so the only possible duplicates
 /// are user plugins sharing a name.
 pub(crate) fn register_plugins(plugins: Vec<Plugin>) {
     COMMANDS.with(|c| {
         let mut map = c.borrow_mut();
-        for plugin in std::iter::once(builtin_window_plugin()).chain(plugins) {
+        let builtins = [builtin_window_plugin(), builtin_focus_plugin()];
+        for plugin in builtins.into_iter().chain(plugins) {
             for (cmd_name, handler) in plugin.commands {
                 let key = format!("{}|{}", plugin.name, cmd_name);
                 if map.insert(key.clone(), handler).is_some() {

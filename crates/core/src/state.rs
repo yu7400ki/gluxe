@@ -33,18 +33,55 @@ use crate::{
 pub(crate) enum WindowCommand {
     /// Change the window title bar text.
     SetTitle(String),
+    /// Move keyboard focus to the element with this id (no-op if not focusable).
+    FocusElement(ElementId),
+    /// Remove focus from the element with this id (only if it currently holds focus).
+    BlurElement(ElementId),
 }
 
 thread_local! {
     /// Never reset on hot reload — title changes issued during old-bundle unmount
     /// still apply to the still-open window.
     static WINDOW_COMMANDS: RefCell<Vec<WindowCommand>> = RefCell::new(Vec::new());
+    /// Programmatic `focus()` requests whose handle isn't painted yet, with a
+    /// remaining retry budget. Retried one-per-frame until resolved or exhausted.
+    static PENDING_FOCUS: RefCell<Vec<(ElementId, u8)>> = RefCell::new(Vec::new());
+    /// Element Tab navigation should resume from when focus falls to nothing / the root.
+    static FOCUS_ANCHOR: Cell<Option<ElementId>> = const { Cell::new(None) };
 }
+
+/// Set/clear the Tab resume anchor.
+pub(crate) fn set_focus_anchor(id: Option<ElementId>) {
+    FOCUS_ANCHOR.with(|c| c.set(id));
+}
+
+/// The Tab resume anchor, if any.
+pub(crate) fn focus_anchor() -> Option<ElementId> {
+    FOCUS_ANCHOR.with(|c| c.get())
+}
+
+/// Frames to retry a deferred `focus()` before giving up (handle normally appears next frame).
+pub(crate) const FOCUS_RETRY_BUDGET: u8 = 5;
 
 /// Enqueue a window command and wake the render pump. Main thread only.
 pub(crate) fn push_window_command(cmd: WindowCommand) {
     WINDOW_COMMANDS.with(|q| q.borrow_mut().push(cmd));
     signal_wake();
+}
+
+/// Queue a focus retry for a later pass with `retries` attempts left.
+pub(crate) fn defer_focus(id: ElementId, retries: u8) {
+    PENDING_FOCUS.with(|q| q.borrow_mut().push((id, retries)));
+}
+
+/// Drain the focus retry list for this pass.
+pub(crate) fn take_pending_focus() -> Vec<(ElementId, u8)> {
+    PENDING_FOCUS.with(|q| std::mem::take(&mut *q.borrow_mut()))
+}
+
+/// Whether any focus retries remain.
+pub(crate) fn has_pending_focus() -> bool {
+    PENDING_FOCUS.with(|q| !q.borrow().is_empty())
 }
 
 pub(crate) fn take_window_commands() -> Vec<WindowCommand> {
@@ -428,6 +465,11 @@ pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
                 AUTO_FOCUSED.with(|set| {
                     set.borrow_mut().remove(id);
                 });
+                // Drop a stale Tab resume-anchor pointing at the removed element.
+                if FOCUS_ANCHOR.with(|c| c.get()) == Some(*id) {
+                    FOCUS_ANCHOR.with(|c| c.set(None));
+                }
+                crate::render::drop_focus_subscriptions(*id);
                 crate::anim::remove_node(*id);
             }
             // Start/replace/cancel style transitions before `apply_command`
@@ -551,6 +593,9 @@ pub(crate) fn reset_for_reload() {
     TEXT_INPUTS.with(|inputs| inputs.borrow_mut().clear());
     FOCUS_HANDLES.with(|handles| handles.borrow_mut().clear());
     AUTO_FOCUSED.with(|set| set.borrow_mut().clear());
+    PENDING_FOCUS.with(|q| q.borrow_mut().clear());
+    FOCUS_ANCHOR.with(|c| c.set(None));
+    crate::render::clear_focus_subscriptions();
     ARMED_DEADLINE.with(|a| a.set(None));
     // Ask any still-running stream handlers (from the old bundle) to wind down:
     // their sinks poll `is_closed()`. Then drop the flags.
@@ -840,6 +885,8 @@ fn call_dispatch(js: &mut JsContext, args: &[JsValue]) {
 /// handler's event argument (`{ type, target, ...payload }`), so field names are
 /// part of the wire contract with host-config.ts.
 pub(crate) enum EventPayload<'a> {
+    /// Events with no extra fields (View/Image focus/blur). JS receives `{ type, target }`.
+    Empty,
     /// Mouse events: cursor position within the window.
     Mouse { x: f32, y: f32 },
     /// Text events (change/submit/focus/blur): current input text.
@@ -860,6 +907,7 @@ fn dispatch_event_with_payload(id: ElementId, event_type: &str, payload: EventPa
     with_boa(|js| {
         let obj = JsObject::with_object_proto(js.intrinsics());
         match payload {
+            EventPayload::Empty => {}
             EventPayload::Mouse { x, y } => {
                 let _ = obj.set(js_string!("x"), f64::from(x), false, js);
                 let _ = obj.set(js_string!("y"), f64::from(y), false, js);
@@ -896,6 +944,12 @@ pub(crate) fn dispatch_mouse_event(id: ElementId, event_type: &str, x: f32, y: f
 
 pub(crate) fn dispatch_value_event(id: ElementId, event_type: &str, value: &str) {
     dispatch_event_with_payload(id, event_type, EventPayload::Value(value));
+}
+
+/// Dispatch an event carrying no extra fields (e.g. View/Image `focus`/`blur`).
+/// JS handler receives `{ type, target }`.
+pub(crate) fn dispatch_simple_event(id: ElementId, event_type: &str) {
+    dispatch_event_with_payload(id, event_type, EventPayload::Empty);
 }
 
 pub(crate) fn dispatch_key_event(
@@ -941,6 +995,18 @@ pub(crate) fn focus_handle(id: ElementId, cx: &mut App) -> FocusHandle {
 /// where `&mut App` is unavailable; `None` if the pre-pass did not create it yet.
 pub(crate) fn get_focus_handle(id: ElementId) -> Option<FocusHandle> {
     FOCUS_HANDLES.with(|handles| handles.borrow().get(&id).cloned())
+}
+
+/// The focusable View/Image that currently holds focus, if any (used to keep the
+/// Tab resume anchor current). `None` for the root fallback / TextInput / nothing.
+pub(crate) fn focused_element_id(window: &Window) -> Option<ElementId> {
+    FOCUS_HANDLES.with(|handles| {
+        handles
+            .borrow()
+            .iter()
+            .find(|(_, handle)| handle.is_focused(window))
+            .map(|(id, _)| *id)
+    })
 }
 
 /// Mark `id` as having received its initial autoFocus. Returns `true` the first

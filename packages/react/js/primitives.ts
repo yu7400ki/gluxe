@@ -10,6 +10,24 @@ export type ImageType = typeof Image;
 export type TextInputType = typeof TextInput;
 export type HostType = ViewType | TextType | ImageType | TextInputType;
 
+/**
+ * The value exposed on a host element `ref` (`ref.current`). Carries the
+ * Rust-side element id plus imperative focus controls.
+ *
+ * @example
+ * const ref = useRef<GpuiInstance>(null);
+ * <View ref={ref} tabIndex={0} />;
+ * ref.current?.focus();
+ */
+export interface GpuiInstance {
+  /** Rust-side ElementId of this host element. */
+  readonly id: number;
+  /** Move keyboard focus to this element (no-op unless it is focusable). */
+  focus(): Promise<void>;
+  /** Remove keyboard focus from this element (only if it currently holds it). */
+  blur(): Promise<void>;
+}
+
 /** Fields shared by all GPUI event objects. */
 export interface GpuiEventBase {
   /** ElementId of the element that received the event. */
@@ -40,11 +58,12 @@ export interface GpuiKeyboardEvent extends GpuiEventBase {
   meta: boolean;
 }
 
-/** Focus event passed to `onFocus` / `onBlur` on `<TextInput>`. */
+/** Focus event passed to `onFocus` / `onBlur`. */
 export interface GpuiFocusEvent extends GpuiEventBase {
   type: "focus" | "blur";
-  /** Current text value of the input at the time of the event. */
-  value: string;
+  /** Current text value at the time of the event. Present on `<TextInput>` only;
+   *  `undefined` for `<View>` / `<Image>` / `<Text>`. */
+  value?: string;
 }
 
 /** Event handler props supported by host elements (DOM-style naming). */
@@ -56,8 +75,24 @@ export interface EventProps {
   onMouseEnter?: (e: GpuiMouseEvent) => void;
   onMouseLeave?: (e: GpuiMouseEvent) => void;
   /** Fires while this element (or a descendant) holds keyboard focus.
-   *  Elements with `onKeyDown` (or `autoFocus`) are automatically focusable. */
+   *  Any focus-related prop (below) makes the element focusable. */
   onKeyDown?: (e: GpuiKeyboardEvent) => void;
+  /** Fires when this element gains keyboard focus. Implies focusability. */
+  onFocus?: (e: GpuiFocusEvent) => void;
+  /** Fires when this element loses keyboard focus. Implies focusability. */
+  onBlur?: (e: GpuiFocusEvent) => void;
+  /**
+   * Tab order index (HTML-style). Setting it makes the element focusable:
+   * - `>= 0` — reachable via Tab / Shift+Tab, and programmatically focusable.
+   * - `-1` — programmatically focusable (`ref.current.focus()`) but skipped by Tab.
+   */
+  tabIndex?: number;
+  /** Override whether the element is a Tab stop. Defaults from `tabIndex`
+   *  (`>= 0` → stop). Use `tabStop={false}` on a focusable element to keep it
+   *  out of the Tab order while still allowing programmatic focus. */
+  tabStop?: boolean;
+  /** Ref to this element's {@link GpuiInstance} (`ref.current.focus()` / `.blur()`). */
+  ref?: React.Ref<GpuiInstance>;
 }
 
 /** Callback for text-input value changes and submit (React Native-style). */
@@ -150,6 +185,13 @@ export interface TextInputProps {
   onFocus?: (e: GpuiFocusEvent) => void;
   onBlur?: (e: GpuiFocusEvent) => void;
   style?: StyleProps;
+  /** Tab order index. A `<TextInput>` is keyboard-reachable by default;
+   *  set `tabIndex={-1}` (or `tabStop={false}`) to remove it from the Tab order. */
+  tabIndex?: number;
+  /** Override whether this input is a Tab stop (default: `true`). */
+  tabStop?: boolean;
+  /** Ref to this element's {@link GpuiInstance} (`ref.current.focus()` / `.blur()`). */
+  ref?: React.Ref<GpuiInstance>;
 }
 
 type Px = `${number}px`;
@@ -462,6 +504,12 @@ export interface StyleProps extends BaseStyleProps {
   _hover?: BaseStyleProps;
   /** Applied while the element is being pressed (`:active`). */
   _active?: BaseStyleProps;
+  /** Applied while the element holds keyboard focus (`:focus`). Requires the
+   *  element to be focusable (e.g. `tabIndex`). */
+  _focus?: BaseStyleProps;
+  /** Applied while the element is focused *via the keyboard* (`:focus-visible`).
+   *  Prefer this over `_focus` for focus rings so they don't show on click. */
+  _focusVisible?: BaseStyleProps;
   /**
    * Animate changes to animatable style props over time (CSS-like
    * transitions). Applies to prop changes only — `_hover`/`_active`

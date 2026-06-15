@@ -311,6 +311,11 @@ impl<'a> PropReader<'a> {
         self.first(ctx, |o, c| get_bool(o, key, c))
     }
 
+    /// Reads a numeric prop, truncating to `i32` (e.g. `tabIndex`).
+    pub(crate) fn i32_val(&self, key: &str, ctx: &mut JsContext) -> Option<i32> {
+        self.first(ctx, |o, c| get_f32(o, key, c)).map(|n| n as i32)
+    }
+
     pub(crate) fn font_weight(&self, ctx: &mut JsContext) -> Option<f32> {
         self.first(ctx, get_font_weight)
     }

@@ -6,7 +6,7 @@ use std::{
 use gpui::{
     Anchor, AnyElement, App, Bounds, Context as GpuiContext, Element, Entity, GlobalElementId,
     InspectorElementId, IntoElement, KeyDownEvent, LayoutId, MouseButton, Pixels, Point, Render,
-    Window, WindowControlArea, anchored, deferred, div, img, point, prelude::*, px,
+    Subscription, Window, WindowControlArea, anchored, deferred, div, img, point, prelude::*, px,
 };
 use rustc_hash::FxHashMap;
 use url::Url;
@@ -15,11 +15,11 @@ use crate::{
     component::{self, NativeRenderContext},
     model::{
         ApplyOutcome, ElementId, ElementKind, Events, FloatingAlign, FloatingSide, FloatingSpec,
-        OverflowMode, StyleFields,
+        OverflowMode, Props, StyleFields,
     },
     state::{
-        dispatch_key_event, dispatch_mouse_event, focus_handle, notify_text_input_entity,
-        scroll_handle, text_input_entity, try_autofocus, with_tree,
+        dispatch_key_event, dispatch_mouse_event, dispatch_simple_event, focus_handle,
+        notify_text_input_entity, scroll_handle, text_input_entity, try_autofocus, with_tree,
     },
     style::apply_style_props,
 };
@@ -44,6 +44,31 @@ thread_local! {
     /// each prepaint and read (one frame later) by floating elements bound to it.
     static ANCHOR_BOUNDS: RefCell<FxHashMap<ElementId, Bounds<Pixels>>> =
         RefCell::new(FxHashMap::default());
+    /// `onFocus`/`onBlur` subscriptions per element. Rebuilt when the handler set
+    /// changes; dropped on `DetachDeleted` / dev reload.
+    static FOCUS_SUBSCRIPTIONS: RefCell<FxHashMap<ElementId, FocusSubs>> =
+        RefCell::new(FxHashMap::default());
+}
+
+/// `on_focus`/`on_blur` subscriptions tagged with the `(focus, blur)` flags they
+/// were built from, so `attach_focus!` can rebuild on change instead of freezing.
+struct FocusSubs {
+    focus: bool,
+    blur: bool,
+    _subs: Vec<Subscription>, // dropping cancels
+}
+
+/// Drop the focus subscriptions for `id` (called when its node is detached).
+pub(crate) fn drop_focus_subscriptions(id: ElementId) {
+    FOCUS_SUBSCRIPTIONS.with(|subs| {
+        subs.borrow_mut().remove(&id);
+    });
+}
+
+/// Drop all focus subscriptions (dev-mode full reload — old ids never reappear).
+#[cfg(debug_assertions)]
+pub(crate) fn clear_focus_subscriptions() {
+    FOCUS_SUBSCRIPTIONS.with(|subs| subs.borrow_mut().clear());
 }
 
 /// Attach JS event listeners to any `Stateful<T>` (`T: StatefulInteractiveElement`).
@@ -204,11 +229,87 @@ macro_rules! attach_window_control {
     }};
 }
 
+/// Apply focus management to a `Stateful<T>` (`Div`/`Img`): `track_focus`,
+/// `tabIndex`/`tabStop`, `_focus`/`_focusVisible`, `autoFocus`, `onFocus`/`onBlur`.
+///
+/// Macro (not generic) for the same reason as `attach_events!`. `$cx` must be a
+/// `Context<NodeView>`. Call only when `props.is_focusable()`.
+macro_rules! attach_focus {
+    ($s:expr, $eid:expr, $props:expr, $window:expr, $cx:expr) => {{
+        let mut s = $s;
+        let eid: ElementId = $eid;
+        let props: &Props = $props;
+        // Tab order goes ON THE FocusHandle: with `track_focus`, gpui reads
+        // tab_index/tab_stop from the handle and ignores element-level setters.
+        // HTML semantics: tabIndex >= 0 is a tab stop; < 0 is focusable but skipped.
+        let mut handle = focus_handle(eid, $cx);
+        if let Some(idx) = props.tab_index {
+            handle = handle.tab_index(idx as isize);
+        }
+        let tab_stop = props
+            .tab_stop
+            .unwrap_or_else(|| props.tab_index.is_some_and(|i| i >= 0));
+        handle = handle.tab_stop(tab_stop);
+        s = s.track_focus(&handle);
+        if let Some(fs) = &props.focus_style {
+            let fs: &StyleFields = fs.as_ref();
+            s = s.focus(|style| apply_style_props(style, fs));
+        }
+        if let Some(fvs) = &props.focus_visible_style {
+            let fvs: &StyleFields = fvs.as_ref();
+            s = s.focus_visible(|style| apply_style_props(style, fvs));
+        }
+        if props.autofocus {
+            try_autofocus(eid, $window, $cx);
+        }
+        // Rebuild on_focus/on_blur only when the (focus, blur) set changes, so a
+        // handler added/removed later takes effect (no frozen set, no leak).
+        let want_focus = props.events.focus;
+        let want_blur = props.events.blur;
+        let changed = FOCUS_SUBSCRIPTIONS.with(|subs| {
+            subs.borrow().get(&eid).map_or(want_focus || want_blur, |s| {
+                s.focus != want_focus || s.blur != want_blur
+            })
+        });
+        if changed {
+            if want_focus || want_blur {
+                let mut list: Vec<Subscription> = Vec::new();
+                if want_focus {
+                    list.push($cx.on_focus(&handle, $window, move |_, _, _| {
+                        dispatch_simple_event(eid, "focus");
+                    }));
+                }
+                if want_blur {
+                    list.push($cx.on_blur(&handle, $window, move |_, _, _| {
+                        dispatch_simple_event(eid, "blur");
+                    }));
+                }
+                FOCUS_SUBSCRIPTIONS.with(|subs| {
+                    subs.borrow_mut().insert(
+                        eid,
+                        FocusSubs {
+                            focus: want_focus,
+                            blur: want_blur,
+                            _subs: list,
+                        },
+                    );
+                });
+            } else {
+                // Both handlers removed — drop the subscriptions.
+                FOCUS_SUBSCRIPTIONS.with(|subs| {
+                    subs.borrow_mut().remove(&eid);
+                });
+            }
+        }
+        s
+    }};
+}
+
 /// Build a styled `Div` (or `Stateful<Div>` when needed) from `props`.
 ///
 /// Same macro-not-generic rationale as `attach_events!`. A `Stateful<Div>`
 /// (via `.id()`) is used when any of: hover/active pseudo-selectors, JS event
-/// handlers, scroll, autofocus, or windowControlArea is present.
+/// handlers, scroll, focus (any focus-related prop), or windowControlArea is present.
 macro_rules! build_div_with_pseudo {
     ($id:expr, $props:expr, $children:expr, $window:expr, $cx:expr) => {{
         let mut div = apply_style_props(div(), &$props.style);
@@ -220,7 +321,7 @@ macro_rules! build_div_with_pseudo {
             || $props.active.is_some()
             || $props.events.any()
             || $props.style.scrolls()
-            || $props.autofocus
+            || $props.is_focusable()
             || $props.window_control_area.is_some()
         {
             let eid: ElementId = $id;
@@ -229,13 +330,9 @@ macro_rules! build_div_with_pseudo {
                 let active_props: &StyleFields = active_props.as_ref();
                 stateful = stateful.active(|style| apply_style_props(style, active_props));
             }
-            // `onKeyDown` / `autoFocus` require a FocusHandle for GPUI key routing.
-            if $props.events.keydown || $props.autofocus {
-                let handle = focus_handle(eid, $cx);
-                stateful = stateful.track_focus(&handle);
-                if $props.autofocus {
-                    try_autofocus(eid, $window, $cx);
-                }
+            // Focus management (track_focus/tabIndex/_focus/autoFocus/onFocus/onBlur).
+            if $props.is_focusable() {
+                stateful = attach_focus!(stateful, eid, &$props, $window, $cx);
             }
             // overflow_*_scroll requires `.id()` (StatefulInteractiveElement).
             if matches!($props.style.overflow_x, Some(OverflowMode::Scroll)) {
@@ -576,16 +673,12 @@ impl Render for NodeView {
 
                     // `.id()` → `Stateful<Img>` (StatefulInteractiveElement, same as Stateful<Div>).
                     if element.props.events.any()
-                        || element.props.autofocus
+                        || element.props.is_focusable()
                         || element.props.window_control_area.is_some()
                     {
                         let mut stateful = image.id(id as usize);
-                        if element.props.events.keydown || element.props.autofocus {
-                            let handle = focus_handle(id, cx);
-                            stateful = stateful.track_focus(&handle);
-                            if element.props.autofocus {
-                                try_autofocus(id, window, cx);
-                            }
+                        if element.props.is_focusable() {
+                            stateful = attach_focus!(stateful, id, &element.props, window, cx);
                         }
                         if let Some(area) = element.props.window_control_area {
                             stateful = attach_window_control!(stateful, area);
@@ -659,9 +752,43 @@ impl Render for NodeView {
 // GPUI root view
 // ---------------------------------------------------------------------------
 
-pub(crate) struct RootView;
+// Global Tab navigation actions. Declared here (the root view consumes them via
+// `on_action`); the matching key bindings are registered once in `lib.rs`.
+gpui::actions!(gluxe_focus, [FocusNext, FocusPrev]);
+
+/// Key context for the root view. The `Tab`/`Shift-Tab` bindings are scoped to it
+/// (in `lib.rs`) so a deeper context (e.g. `"TextInput"`) can override the key.
+pub(crate) const ROOT_KEY_CONTEXT: &str = "Root";
+
+pub(crate) struct RootView {
+    /// Holds focus while nothing else is, giving `Tab` a dispatch origin.
+    pub(crate) focus_handle: gpui::FocusHandle,
+}
 
 impl RootView {
+    /// Construct the root view, allocating its focus handle.
+    pub(crate) fn new(cx: &mut GpuiContext<Self>) -> Self {
+        Self {
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    /// If focus has fallen to the root fallback / nothing (after blur or a click
+    /// elsewhere), restore it to the last focused element so Tab resumes from there
+    /// instead of the first stop. The anchor is kept current by `render`. Restoring
+    /// then `focus_next` fires no spurious events — gpui coalesces focus per frame.
+    fn resume_focus_anchor(&self, window: &mut Window, cx: &mut App) {
+        let on_real_element =
+            window.focused(cx).is_some() && !self.focus_handle.is_focused(window);
+        if !on_real_element {
+            if let Some(prev) = crate::state::focus_anchor() {
+                if let Some(handle) = crate::state::get_focus_handle(prev) {
+                    window.focus(&handle, cx);
+                }
+            }
+        }
+    }
+
     pub(crate) fn apply_outcome(
         &mut self,
         outcome: ApplyOutcome,
@@ -690,13 +817,32 @@ impl RootView {
 }
 
 impl Render for RootView {
-    fn render(&mut self, _window: &mut Window, cx: &mut GpuiContext<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut GpuiContext<Self>) -> impl IntoElement {
+        // Record the focused element as the Tab resume anchor (see resume_focus_anchor).
+        if let Some(id) = crate::state::focused_element_id(window) {
+            crate::state::set_focus_anchor(Some(id));
+        }
+        // Keep the root focused while nothing else is, so `Tab` has a dispatch
+        // origin. Self-correcting: once something is focused this is skipped.
+        if window.focused(cx).is_none() {
+            window.focus(&self.focus_handle, cx);
+        }
         let root_ids = with_tree(|tree| tree.root_children.clone());
         let root_children: Vec<AnyElement> = root_ids
             .iter()
             .filter_map(|&id| render_child(id, cx))
             .collect();
         div()
+            .track_focus(&self.focus_handle)
+            .key_context(ROOT_KEY_CONTEXT)
+            .on_action(cx.listener(|this, _: &FocusNext, window, cx| {
+                this.resume_focus_anchor(window, cx);
+                window.focus_next(cx);
+            }))
+            .on_action(cx.listener(|this, _: &FocusPrev, window, cx| {
+                this.resume_focus_anchor(window, cx);
+                window.focus_prev(cx);
+            }))
             .size_full()
             .flex()
             .items_start()
