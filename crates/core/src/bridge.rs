@@ -220,6 +220,16 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
         Ok(JsValue::undefined())
     });
 
+    // Synchronous read of the focused element id (any kind), as of the last paint;
+    // `null` for the root fallback / nothing. Backs `getActiveElement()` for
+    // save/restore-focus patterns. Read-only — no command queued.
+    let get_active_element = NativeFunction::from_copy_closure(|_this, _args, _ctx| {
+        Ok(match state::active_element() {
+            Some(id) => JsValue::from(id as f64),
+            None => JsValue::null(),
+        })
+    });
+
     let bridge = JsObject::with_object_proto(ctx.intrinsics());
     set_bridge_fn(ctx, &bridge, "createInstance", create_instance)?;
     set_bridge_fn(ctx, &bridge, "createText", create_text)?;
@@ -233,6 +243,7 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     set_bridge_fn(ctx, &bridge, "updateText", update_text)?;
     set_bridge_fn(ctx, &bridge, "clearContainer", clear_container)?;
     set_bridge_fn(ctx, &bridge, "detachDeleted", detach_deleted)?;
+    set_bridge_fn(ctx, &bridge, "getActiveElement", get_active_element)?;
 
     ctx.global_object()
         .set(js_string!("__bridge"), bridge, false, ctx)?;

@@ -575,7 +575,7 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                         let _ = root.update(cx, |_, window, cx| {
                             // Retry focus once the handle has been painted.
                             for (id, retries_left) in pending_focus {
-                                if let Some(handle) = get_focus_handle(id) {
+                                if let Some(handle) = get_focus_handle(id, cx) {
                                     window.focus(&handle, cx);
                                 } else if retries_left > 0 {
                                     state::defer_focus(id, retries_left - 1);
@@ -587,7 +587,7 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                                         window.set_window_title(&t);
                                     }
                                     state::WindowCommand::FocusElement(id) => {
-                                        if let Some(handle) = get_focus_handle(id) {
+                                        if let Some(handle) = get_focus_handle(id, cx) {
                                             window.focus(&handle, cx);
                                         } else {
                                             // Not painted yet (e.g. focus on mount) — retry.
@@ -597,7 +597,7 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                                     state::WindowCommand::BlurElement(id) => {
                                         // Blur only if this element holds focus, so it
                                         // can't steal focus from a sibling.
-                                        if get_focus_handle(id)
+                                        if get_focus_handle(id, cx)
                                             .is_some_and(|h| h.is_focused(window))
                                         {
                                             window.blur();

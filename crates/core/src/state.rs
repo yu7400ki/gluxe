@@ -12,7 +12,9 @@ use std::time::Duration;
 
 use boa_engine::context::time::JsInstant;
 use boa_engine::{Context as JsContext, JsObject, JsString, JsValue, js_string};
-use gpui::{App, AppContext, BackgroundExecutor, Entity, FocusHandle, ScrollHandle, Window};
+use gpui::{
+    App, AppContext, BackgroundExecutor, Entity, FocusHandle, Focusable, ScrollHandle, Window,
+};
 
 use crate::{
     jobs::GpuiJobExecutor,
@@ -48,6 +50,22 @@ thread_local! {
     static PENDING_FOCUS: RefCell<Vec<(ElementId, u8)>> = RefCell::new(Vec::new());
     /// Element Tab navigation should resume from when focus falls to nothing / the root.
     static FOCUS_ANCHOR: Cell<Option<ElementId>> = const { Cell::new(None) };
+    /// Element holding keyboard focus as of the last paint (any kind: View/Image/
+    /// TextInput), or `None` for the root fallback / nothing. Refreshed every
+    /// `RootView::render`; read synchronously by `__bridge.getActiveElement()`.
+    static ACTIVE_ELEMENT: Cell<Option<ElementId>> = const { Cell::new(None) };
+}
+
+/// Record the element holding focus as of the current paint (called from
+/// `RootView::render`). `None` clears it.
+pub(crate) fn set_active_element(id: Option<ElementId>) {
+    ACTIVE_ELEMENT.with(|c| c.set(id));
+}
+
+/// The element holding keyboard focus as of the last paint, if any. Backs the
+/// synchronous JS `getActiveElement()` (used to save/restore focus around modals).
+pub(crate) fn active_element() -> Option<ElementId> {
+    ACTIVE_ELEMENT.with(|c| c.get())
 }
 
 /// Set/clear the Tab resume anchor.
@@ -465,9 +483,14 @@ pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
                 AUTO_FOCUSED.with(|set| {
                     set.borrow_mut().remove(id);
                 });
-                // Drop a stale Tab resume-anchor pointing at the removed element.
+                // Drop a stale Tab resume-anchor / active-element pointing at the
+                // removed element (both are recomputed next render, but clear now so
+                // a query between detach and the next paint can't return a dead id).
                 if FOCUS_ANCHOR.with(|c| c.get()) == Some(*id) {
                     FOCUS_ANCHOR.with(|c| c.set(None));
+                }
+                if ACTIVE_ELEMENT.with(|c| c.get()) == Some(*id) {
+                    ACTIVE_ELEMENT.with(|c| c.set(None));
                 }
                 crate::render::drop_focus_subscriptions(*id);
                 crate::anim::remove_node(*id);
@@ -595,6 +618,7 @@ pub(crate) fn reset_for_reload() {
     AUTO_FOCUSED.with(|set| set.borrow_mut().clear());
     PENDING_FOCUS.with(|q| q.borrow_mut().clear());
     FOCUS_ANCHOR.with(|c| c.set(None));
+    ACTIVE_ELEMENT.with(|c| c.set(None));
     crate::render::clear_focus_subscriptions();
     ARMED_DEADLINE.with(|a| a.set(None));
     // Ask any still-running stream handlers (from the old bundle) to wind down:
@@ -991,10 +1015,25 @@ pub(crate) fn focus_handle(id: ElementId, cx: &mut App) -> FocusHandle {
     })
 }
 
-/// Retrieve the `FocusHandle` for `id` without creating it. Used in `render_node`
-/// where `&mut App` is unavailable; `None` if the pre-pass did not create it yet.
-pub(crate) fn get_focus_handle(id: ElementId) -> Option<FocusHandle> {
-    FOCUS_HANDLES.with(|handles| handles.borrow().get(&id).cloned())
+/// Resolve the `FocusHandle` for any focusable element id, spanning both
+/// View/Image (`FOCUS_HANDLES`) and `TextInput` (`TEXT_INPUTS`, whose handle lives
+/// inside the entity). `None` if `id` isn't focusable or its handle isn't created
+/// yet (element not painted) — callers fall back to a deferred retry.
+///
+/// Reads without creating; handles are created in the render pre-pass
+/// (`focus_handle` / `text_input_entity`). View/Image is checked first; element
+/// kinds are mutually exclusive so there is no id collision.
+pub(crate) fn get_focus_handle(id: ElementId, cx: &App) -> Option<FocusHandle> {
+    FOCUS_HANDLES
+        .with(|handles| handles.borrow().get(&id).cloned())
+        .or_else(|| {
+            TEXT_INPUTS.with(|inputs| {
+                inputs
+                    .borrow()
+                    .get(&id)
+                    .map(|entity| entity.read(cx).focus_handle(cx))
+            })
+        })
 }
 
 /// The focusable View/Image that currently holds focus, if any (used to keep the
@@ -1006,6 +1045,24 @@ pub(crate) fn focused_element_id(window: &Window) -> Option<ElementId> {
             .iter()
             .find(|(_, handle)| handle.is_focused(window))
             .map(|(id, _)| *id)
+    })
+}
+
+/// The element holding focus across BOTH handle stores — View/Image (`FOCUS_HANDLES`)
+/// and `TextInput` (`TEXT_INPUTS`) — or `None` for the root fallback / nothing.
+///
+/// Unlike `focused_element_id` (View/Image-only, for the Tab anchor), this is the
+/// full active-element query that backs `getActiveElement`. View/Image is checked
+/// first; kinds are mutually exclusive so the order only affects the empty case.
+pub(crate) fn active_element_id(window: &Window, cx: &App) -> Option<ElementId> {
+    focused_element_id(window).or_else(|| {
+        TEXT_INPUTS.with(|inputs| {
+            inputs
+                .borrow()
+                .iter()
+                .find(|(_, entity)| entity.read(cx).focus_handle(cx).is_focused(window))
+                .map(|(id, _)| *id)
+        })
     })
 }
 
@@ -1022,7 +1079,7 @@ pub(crate) fn mark_autofocus(id: ElementId) -> bool {
 /// elements. Guarded by `mark_autofocus` so focus is stolen at most once.
 pub(crate) fn try_autofocus(id: ElementId, window: &mut Window, cx: &mut App) {
     if mark_autofocus(id) {
-        if let Some(handle) = get_focus_handle(id) {
+        if let Some(handle) = get_focus_handle(id, cx) {
             window.focus(&handle, cx);
         }
     }

@@ -782,7 +782,7 @@ impl RootView {
             window.focused(cx).is_some() && !self.focus_handle.is_focused(window);
         if !on_real_element {
             if let Some(prev) = crate::state::focus_anchor() {
-                if let Some(handle) = crate::state::get_focus_handle(prev) {
+                if let Some(handle) = crate::state::get_focus_handle(prev, cx) {
                     window.focus(&handle, cx);
                 }
             }
@@ -822,6 +822,10 @@ impl Render for RootView {
         if let Some(id) = crate::state::focused_element_id(window) {
             crate::state::set_focus_anchor(Some(id));
         }
+        // Snapshot the active element (any kind, incl. TextInput) for the
+        // synchronous JS `getActiveElement()`. Recorded BEFORE the root-focus
+        // fallback below so it reflects the real focused element, not the root.
+        crate::state::set_active_element(crate::state::active_element_id(window, cx));
         // Keep the root focused while nothing else is, so `Tab` has a dispatch
         // origin. Self-correcting: once something is focused this is skipped.
         if window.focused(cx).is_none() {
