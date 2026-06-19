@@ -398,17 +398,19 @@ pub(crate) fn clear_node_views() {
     anchor::clear();
 }
 
-fn render_child(id: ElementId, cx: &mut App) -> Option<AnyElement> {
-    let raw_text = with_tree(|tree| {
+/// The text of `id` when it is a `RawText` node, else `None`. Lets the renderer
+/// splice adjacent text children onto one line without materialising an element.
+fn raw_text_of(id: ElementId) -> Option<String> {
+    with_tree(|tree| {
         tree.nodes.get(&id).and_then(|element| {
-            if matches!(&element.kind, ElementKind::RawText) {
-                Some(element.text.clone().unwrap_or_default())
-            } else {
-                None
-            }
+            matches!(&element.kind, ElementKind::RawText)
+                .then(|| element.text.clone().unwrap_or_default())
         })
-    });
-    if let Some(text) = raw_text {
+    })
+}
+
+fn render_child(id: ElementId, cx: &mut App) -> Option<AnyElement> {
+    if let Some(text) = raw_text_of(id) {
         return Some(text.into_any_element());
     }
 
@@ -463,16 +465,7 @@ impl Render for NodeView {
                 let mut children: Vec<AnyElement> = Vec::new();
                 let mut text_buf = String::new();
                 for &child_id in &element.children {
-                    let raw_text = with_tree(|tree| {
-                        tree.nodes.get(&child_id).and_then(|child_element| {
-                            if matches!(&child_element.kind, ElementKind::RawText) {
-                                Some(child_element.text.clone().unwrap_or_default())
-                            } else {
-                                None
-                            }
-                        })
-                    });
-                    if let Some(raw_text) = raw_text {
+                    if let Some(raw_text) = raw_text_of(child_id) {
                         text_buf.push_str(&raw_text);
                     } else {
                         if !text_buf.is_empty() {
