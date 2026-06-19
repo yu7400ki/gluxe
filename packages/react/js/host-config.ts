@@ -5,6 +5,7 @@
 // Rust stores only bool flags (which events are registered) and calls
 // globalThis.__dispatchEvent(id, type, payload) when a GPUI event fires.
 
+import { hostGlobal } from "./bridge-channel";
 import { invoke } from "./invoke";
 import type { GpuiFocusEvent, GpuiKeyboardEvent, GpuiMouseEvent } from "./primitives";
 
@@ -39,30 +40,6 @@ type GpuiEvent = GpuiMouseEvent | GpuiKeyboardEvent | GpuiFocusEvent;
 type EventHandler = (e: GpuiEvent) => void;
 type TextEventHandler = (text: string) => void;
 type RegisteredHandler = EventHandler | TextEventHandler;
-
-interface Bridge {
-  createInstance(type: string, props: Props, events: string[]): number;
-  createText(text: string): number;
-  appendChild(parentId: number, childId: number): void;
-  appendToContainer(childId: number): void;
-  insertBefore(parentId: number, childId: number, beforeId: number): void;
-  insertInContainer(childId: number, beforeId: number): void;
-  removeChild(parentId: number, childId: number): void;
-  removeFromContainer(childId: number): void;
-  updateProps(id: number, props: Props, events: string[], type: string): void;
-  updateText(id: number, text: string): void;
-  clearContainer(): void;
-  detachDeleted(id: number): void;
-}
-
-type DispatchEvent = (id: number, type: string, payload: Record<string, unknown>) => void;
-
-interface HostGlobal {
-  __bridge: Bridge;
-  __dispatchEvent?: DispatchEvent;
-}
-
-const hostGlobal = globalThis as unknown as HostGlobal;
 
 /** How a dispatched event reaches its JS handler: `"event"` delivers an event
  *  object (`{ type, target, ...payload }`); `"text"` delivers the raw string

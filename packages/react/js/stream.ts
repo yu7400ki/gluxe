@@ -9,26 +9,18 @@
 // async iteration (`for await`), and `cancel()`. Chunks carry arbitrary JSON
 // values (binary data should be base64-encoded by the plugin and decoded here).
 
-type Envelope = { t: "chunk"; value: unknown } | { t: "end" } | { t: "error"; error?: string };
+import { createIdGenerator, hostGlobal, type StreamEnvelope } from "./bridge-channel";
 
-interface StreamGlobal {
-  __invokeStream: (streamId: number, cmd: string, argsJson: string) => void;
-  __streamCancel: (streamId: number) => void;
-  __streamPush?: (streamId: number, json: string) => void;
-}
-
-const streamGlobal = globalThis as unknown as StreamGlobal;
-
-let nextStreamId = 1;
+const nextStreamId = createIdGenerator();
 // Live streams keyed by id. Entries are removed on terminal (end/error) and on
 // cancel, so a late `__streamPush` to a stale id is a harmless no-op.
 const controllers = new Map<number, GluxeStream<unknown>>();
 
 /** Called by Rust from the pump loop to push a chunk / close / error a stream. */
-streamGlobal.__streamPush = (streamId: number, json: string): void => {
+hostGlobal.__streamPush = (streamId: number, json: string): void => {
   const stream = controllers.get(streamId);
   if (!stream) return; // already cancelled or terminated
-  const env = JSON.parse(json) as Envelope;
+  const env = JSON.parse(json) as StreamEnvelope;
   if (env.t === "chunk") {
     stream._enqueue(env.value);
   } else if (env.t === "end") {
@@ -124,7 +116,7 @@ export class GluxeStream<T> {
     if (this.cancelled || this.done) return;
     this.cancelled = true;
     controllers.delete(this.streamId);
-    streamGlobal.__streamCancel(this.streamId);
+    hostGlobal.__streamCancel(this.streamId);
     this._close();
   }
 
@@ -163,9 +155,9 @@ export function invokeStream<T = unknown>(
   cmd: string,
   args: Record<string, unknown> = {},
 ): GluxeStream<T> {
-  const id = nextStreamId++;
+  const id = nextStreamId();
   const stream = new GluxeStream<T>(id);
   controllers.set(id, stream as GluxeStream<unknown>);
-  streamGlobal.__invokeStream(id, cmd, JSON.stringify(args));
+  hostGlobal.__invokeStream(id, cmd, JSON.stringify(args));
   return stream;
 }

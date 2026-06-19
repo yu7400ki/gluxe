@@ -5,20 +5,10 @@
 // id-based control: save the active element before opening a modal, restore it on
 // close. Building blocks for focus restoration and traps.
 
+import { hostGlobal } from "./bridge-channel";
 import { invoke } from "./invoke";
 
-interface FocusBridge {
-  /** Synchronous read of the focused element id (any kind), or null. */
-  getActiveElement(): number | null;
-  /** Synchronous read of the tab-stop focusable ids in a subtree, in Tab order. */
-  getFocusableElements(rootId: number): number[];
-  /** Confine Tab navigation to a subtree (push onto the scope stack). */
-  pushTabScope(rootId: number): void;
-  /** Release a Tab scope (remove from the scope stack by id). */
-  popTabScope(rootId: number): void;
-}
-
-const bridge = (globalThis as unknown as { __bridge: FocusBridge }).__bridge;
+const bridge = hostGlobal.__bridge;
 
 /**
  * The id of the element holding keyboard focus, or `null` if none.
