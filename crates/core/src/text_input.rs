@@ -17,9 +17,9 @@ use gpui::{
     App, AvailableSpace, Bounds, ClipboardItem, ContentMask, Context, CursorStyle,
     ElementId as GpuiElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
     Focusable, GlobalElementId, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PaintQuad, Pixels, Point, Rgba, ShapedLine, SharedString, Style, TextRun,
-    UTF16Selection, UnderlineStyle, Window, WrappedLine, actions, div, fill, point, prelude::*, px,
-    relative, rgba,
+    MouseUpEvent, PaintQuad, Pixels, Point, Rgba, ScrollWheelEvent, ShapedLine, SharedString,
+    Style, TextRun, UTF16Selection, UnderlineStyle, Window, WrappedLine, actions, div, fill, point,
+    prelude::*, px, relative, rgba,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -101,10 +101,22 @@ pub(crate) struct TextInputState {
     /// otherwise. Used for hit-testing, vertical navigation, and IME bounds.
     last_lines: Vec<WrappedLine>,
     last_bounds: Option<Bounds<Pixels>>,
+    /// Line height the cached layout was painted with. Event handlers and IME queries
+    /// run OUTSIDE the text-style cascade, where `window.line_height()` reflects the
+    /// default font rather than this input's `fontSize`; multiline geometry must use
+    /// this painted value or the row mapping drifts (worse as line count grows).
+    last_line_height: Pixels,
 
     /// Vertical scroll offset (px) for capped (`maxRows`) multiline inputs. Kept so
     /// the caret stays visible while editing; recomputed/clamped every prepaint.
     scroll_top: Pixels,
+    /// Maximum scrollable offset from the last prepaint (content height − viewport).
+    /// Lets the wheel handler clamp without re-shaping; 0 when the content fits.
+    max_scroll: Pixels,
+    /// When set, the next prepaint scrolls to keep the caret visible (the caret moved
+    /// or the content changed). Cleared each prepaint so wheel scrolling isn't yanked
+    /// back to the caret. Starts `true` so the initial caret is shown.
+    autoscroll: bool,
 
     /// True while a mouse drag-select is in progress.
     is_selecting: bool,
@@ -153,7 +165,10 @@ impl TextInputState {
             last_layout: None,
             last_lines: Vec::new(),
             last_bounds: None,
+            last_line_height: px(0.),
             scroll_top: px(0.),
+            max_scroll: px(0.),
+            autoscroll: true,
             is_selecting: false,
             goal_x: None,
             last_sent: initial_str,
@@ -176,6 +191,7 @@ impl TextInputState {
         // so a geometry-derived offset could otherwise point past the (empty) content.
         let offset = offset.min(self.content.len());
         self.selected_range = offset..offset;
+        self.autoscroll = true;
         cx.notify();
     }
 
@@ -190,10 +206,11 @@ impl TextInputState {
             self.selection_reversed = !self.selection_reversed;
             self.selected_range = self.selected_range.end..self.selected_range.start;
         }
+        self.autoscroll = true;
         cx.notify();
     }
 
-    fn index_for_mouse_position(&self, position: Point<Pixels>, line_height: Pixels) -> usize {
+    fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
         let Some(bounds) = self.last_bounds.as_ref() else {
             return 0;
         };
@@ -206,7 +223,7 @@ impl TextInputState {
                 position.x - bounds.left(),
                 (position.y - bounds.top() + self.scroll_top).max(px(0.)),
             );
-            return offset_for_position(&self.last_lines, local, line_height);
+            return offset_for_position(&self.last_lines, local, self.last_line_height);
         }
         // Single-line.
         if self.content.is_empty() {
@@ -262,6 +279,7 @@ impl TextInputState {
     /// Called after every change to the content that should be reported to JS.
     fn notify_change(&mut self, cx: &mut Context<Self>) {
         self.goal_x = None;
+        self.autoscroll = true;
         let value = self.content.to_string();
         self.last_sent = value.clone();
         cx.notify();
@@ -315,13 +333,7 @@ impl TextInputState {
     /// Move the caret to the visual row above/below, preserving the goal column.
     /// On a single-line input, Up/Down jump to the start/end of the content
     /// (matching browser `<input>` behaviour).
-    fn vertical_move(
-        &mut self,
-        down: bool,
-        extend: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn vertical_move(&mut self, down: bool, extend: bool, cx: &mut Context<Self>) {
         if !self.multiline {
             let target = if down { self.content.len() } else { 0 };
             if extend {
@@ -334,7 +346,7 @@ impl TextInputState {
         if self.last_lines.is_empty() {
             return;
         }
-        let line_height = window.line_height();
+        let line_height = self.last_line_height;
         let cur = self.cursor_offset();
         let pos = position_for_offset(&self.last_lines, cur, line_height);
         let goal_x = self.goal_x.unwrap_or(pos.x);
@@ -355,20 +367,20 @@ impl TextInputState {
         }
     }
 
-    fn up(&mut self, _: &Up, window: &mut Window, cx: &mut Context<Self>) {
-        self.vertical_move(false, false, window, cx);
+    fn up(&mut self, _: &Up, _window: &mut Window, cx: &mut Context<Self>) {
+        self.vertical_move(false, false, cx);
     }
 
-    fn down(&mut self, _: &Down, window: &mut Window, cx: &mut Context<Self>) {
-        self.vertical_move(true, false, window, cx);
+    fn down(&mut self, _: &Down, _window: &mut Window, cx: &mut Context<Self>) {
+        self.vertical_move(true, false, cx);
     }
 
-    fn select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
-        self.vertical_move(false, true, window, cx);
+    fn select_up(&mut self, _: &SelectUp, _window: &mut Window, cx: &mut Context<Self>) {
+        self.vertical_move(false, true, cx);
     }
 
-    fn select_down(&mut self, _: &SelectDown, window: &mut Window, cx: &mut Context<Self>) {
-        self.vertical_move(true, true, window, cx);
+    fn select_down(&mut self, _: &SelectDown, _window: &mut Window, cx: &mut Context<Self>) {
+        self.vertical_move(true, true, cx);
     }
 
     fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -387,20 +399,20 @@ impl TextInputState {
         self.select_to(self.content.len(), cx);
     }
 
-    fn home(&mut self, _: &Home, window: &mut Window, cx: &mut Context<Self>) {
+    fn home(&mut self, _: &Home, _window: &mut Window, cx: &mut Context<Self>) {
         self.goal_x = None;
         if self.multiline && !self.last_lines.is_empty() {
-            let off = self.visual_row_start(self.cursor_offset(), window.line_height());
+            let off = self.visual_row_start(self.cursor_offset(), self.last_line_height);
             self.move_to(off, cx);
         } else {
             self.move_to(0, cx);
         }
     }
 
-    fn end(&mut self, _: &End, window: &mut Window, cx: &mut Context<Self>) {
+    fn end(&mut self, _: &End, _window: &mut Window, cx: &mut Context<Self>) {
         self.goal_x = None;
         if self.multiline && !self.last_lines.is_empty() {
-            let off = self.visual_row_end(self.cursor_offset(), window.line_height());
+            let off = self.visual_row_end(self.cursor_offset(), self.last_line_height);
             self.move_to(off, cx);
         } else {
             self.move_to(self.content.len(), cx);
@@ -462,12 +474,12 @@ impl TextInputState {
     fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.goal_x = None;
         self.is_selecting = true;
-        let idx = self.index_for_mouse_position(event.position, window.line_height());
+        let idx = self.index_for_mouse_position(event.position);
         if event.modifiers.shift {
             self.select_to(idx, cx);
         } else {
@@ -482,12 +494,35 @@ impl TextInputState {
     fn on_mouse_move(
         &mut self,
         event: &MouseMoveEvent,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.is_selecting {
-            let idx = self.index_for_mouse_position(event.position, window.line_height());
+            let idx = self.index_for_mouse_position(event.position);
             self.select_to(idx, cx);
+        }
+    }
+
+    /// Scroll a capped (`maxRows`) multiline input with the wheel/trackpad. Marks the
+    /// scroll as user-driven (clears `autoscroll`) so the next prepaint doesn't snap
+    /// back to the caret. When not scrollable, or already at an edge, the event is left
+    /// to bubble so an ancestor scroll container can take it (scroll chaining).
+    fn on_scroll_wheel(
+        &mut self,
+        event: &ScrollWheelEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.multiline || self.max_scroll <= px(0.) {
+            return;
+        }
+        let dy = event.delta.pixel_delta(window.line_height()).y;
+        let new_scroll = (self.scroll_top - dy).min(self.max_scroll).max(px(0.));
+        if new_scroll != self.scroll_top {
+            self.scroll_top = new_scroll;
+            self.autoscroll = false;
+            cx.stop_propagation();
+            cx.notify();
         }
     }
 
@@ -800,7 +835,7 @@ impl EntityInputHandler for TextInputState {
         &mut self,
         range_utf16: Range<usize>,
         bounds: Bounds<Pixels>,
-        window: &mut Window,
+        _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let range = self.range_from_utf16(&range_utf16);
@@ -808,7 +843,7 @@ impl EntityInputHandler for TextInputState {
             if self.last_lines.is_empty() {
                 return None;
             }
-            let line_height = window.line_height();
+            let line_height = self.last_line_height;
             let s = position_for_offset(&self.last_lines, range.start, line_height);
             let e = position_for_offset(&self.last_lines, range.end, line_height);
             // Same row → span both ends; otherwise expose just the start row.
@@ -835,7 +870,7 @@ impl EntityInputHandler for TextInputState {
     fn character_index_for_point(
         &mut self,
         pt: gpui::Point<Pixels>,
-        window: &mut Window,
+        _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
         let bounds = self.last_bounds?;
@@ -847,7 +882,7 @@ impl EntityInputHandler for TextInputState {
                 (pt.x - bounds.left()).max(px(0.)),
                 (pt.y - bounds.top() + self.scroll_top).max(px(0.)),
             );
-            let utf8_index = offset_for_position(&self.last_lines, local, window.line_height());
+            let utf8_index = offset_for_position(&self.last_lines, local, self.last_line_height);
             return Some(self.offset_to_utf16(utf8_index));
         }
         let line_point = bounds.localize(&pt)?;
@@ -940,6 +975,7 @@ impl Render for TextInputState {
                     self.content = v.clone().into();
                     self.selected_range = self.content.len()..self.content.len();
                     self.last_sent = v;
+                    self.autoscroll = true;
                 }
             }
         }
@@ -981,6 +1017,7 @@ impl Render for TextInputState {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .child(TextElement { input: cx.entity() })
     }
 }
@@ -1122,6 +1159,8 @@ impl Element for TextElement {
         let caret_width = input.caret_width;
         let selection_color = input.selection_color;
         let prev_scroll = input.scroll_top;
+        let autoscroll = input.autoscroll;
+        let focused = input.focus_handle.is_focused(window);
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
@@ -1172,14 +1211,28 @@ impl Element for TextElement {
             let max_scroll = (content_h - viewport_h).max(px(0.));
             let caret = position_for_offset(&lines, cursor, line_height);
             let mut scroll = prev_scroll.min(max_scroll).max(px(0.));
-            if caret.y < scroll {
-                scroll = caret.y;
-            } else if caret.y + line_height > scroll + viewport_h {
-                scroll = caret.y + line_height - viewport_h;
+            // Chase the caret only when focused and it just moved/edited (`autoscroll`);
+            // a wheel-driven scroll clears the flag so the view stays where the user put
+            // it, and an unfocused prefilled field shows from the top rather than the end.
+            if autoscroll && focused {
+                if caret.y < scroll {
+                    scroll = caret.y;
+                } else if caret.y + line_height > scroll + viewport_h {
+                    scroll = caret.y + line_height - viewport_h;
+                }
+                scroll = scroll.min(max_scroll).max(px(0.));
             }
-            scroll = scroll.min(max_scroll).max(px(0.));
-            self.input
-                .update(cx, |input, _cx| input.scroll_top = scroll);
+            self.input.update(cx, |input, _cx| {
+                input.scroll_top = scroll;
+                input.max_scroll = max_scroll;
+                // Consume the request only once it's been honored (i.e. while focused),
+                // so it stays pending across unfocused frames: Tab-focusing a prefilled
+                // overflowing field then still reveals the caret on the first focused
+                // prepaint (mouse focus already re-arms it via `move_to`).
+                if focused {
+                    input.autoscroll = false;
+                }
+            });
 
             let mut selections = Vec::new();
             let cursor_quad = if selected_range.is_empty() {
@@ -1324,6 +1377,7 @@ impl Element for TextElement {
                 input.last_layout = Some(line);
                 input.last_lines.clear();
                 input.last_bounds = Some(bounds);
+                input.last_line_height = line_height;
             });
         } else {
             // Multiline. Clip every quad/line to the element bounds so a
@@ -1360,6 +1414,7 @@ impl Element for TextElement {
                 input.last_layout = None;
                 input.last_lines = lines;
                 input.last_bounds = Some(bounds);
+                input.last_line_height = line_height;
             });
         }
     }
