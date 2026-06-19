@@ -344,13 +344,10 @@ export function useListNavigation({ loop }: { loop: boolean }): ListNavigation {
 
   // The single highlight-move path shared by arrow nav AND type-ahead (C1): same
   // setter + same `focus()`, so the highlight and real keyboard focus never drift.
-  const highlightAndFocus = useCallback(
-    (item: RovingItem) => {
-      setHighlighted(item.value);
-      item.focus();
-    },
-    [],
-  );
+  const highlightAndFocus = useCallback((item: RovingItem) => {
+    setHighlighted(item.value);
+    item.focus();
+  }, []);
 
   // Wrap the exposed setter so clearing the highlight (list close / reset) also
   // drops the type-ahead buffer (C3) — the next open starts clean.

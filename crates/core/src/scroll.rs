@@ -133,7 +133,15 @@ mod tests {
 
     /// `(content 1000, viewport 100)` vertical-only container scrolled to top.
     fn vert(cur: (f32, f32)) -> Option<(f32, f32)> {
-        scroll_offset_for_key("down", none(), false, true, cur, (0.0, 900.0), (100.0, 100.0))
+        scroll_offset_for_key(
+            "down",
+            none(),
+            false,
+            true,
+            cur,
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
     }
 
     fn approx(a: (f32, f32), b: (f32, f32)) -> bool {
@@ -142,60 +150,195 @@ mod tests {
 
     #[test]
     fn arrow_down_up_step_one_line_on_y() {
-        let down = scroll_offset_for_key("down", none(), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let down = scroll_offset_for_key(
+            "down",
+            none(),
+            false,
+            true,
+            (0.0, 0.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(down, (0.0, -40.0)), "{down:?}");
-        let up = scroll_offset_for_key("up", none(), false, true, (0.0, -100.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let up = scroll_offset_for_key(
+            "up",
+            none(),
+            false,
+            true,
+            (0.0, -100.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(up, (0.0, -60.0)), "{up:?}");
     }
 
     #[test]
     fn arrow_left_right_step_on_x() {
-        let right = scroll_offset_for_key("right", none(), true, false, (0.0, 0.0), (900.0, 0.0), (100.0, 100.0)).unwrap();
+        let right = scroll_offset_for_key(
+            "right",
+            none(),
+            true,
+            false,
+            (0.0, 0.0),
+            (900.0, 0.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(right, (-40.0, 0.0)), "{right:?}");
-        let left = scroll_offset_for_key("left", none(), true, false, (-100.0, 0.0), (900.0, 0.0), (100.0, 100.0)).unwrap();
+        let left = scroll_offset_for_key(
+            "left",
+            none(),
+            true,
+            false,
+            (-100.0, 0.0),
+            (900.0, 0.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(left, (-60.0, 0.0)), "{left:?}");
     }
 
     #[test]
     fn page_keys_step_by_viewport_factor() {
-        let pd = scroll_offset_for_key("pagedown", none(), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let pd = scroll_offset_for_key(
+            "pagedown",
+            none(),
+            false,
+            true,
+            (0.0, 0.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(pd, (0.0, -90.0)), "{pd:?}"); // 100 * 0.9
-        let pu = scroll_offset_for_key("pageup", none(), false, true, (0.0, -200.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let pu = scroll_offset_for_key(
+            "pageup",
+            none(),
+            false,
+            true,
+            (0.0, -200.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(pu, (0.0, -110.0)), "{pu:?}");
     }
 
     #[test]
     fn space_is_pagedown_shift_space_is_pageup() {
-        let space = scroll_offset_for_key("space", none(), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let space = scroll_offset_for_key(
+            "space",
+            none(),
+            false,
+            true,
+            (0.0, 0.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(space, (0.0, -90.0)), "{space:?}");
-        let shift_space = scroll_offset_for_key("space", mods(true, false, false, false), false, true, (0.0, -200.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let shift_space = scroll_offset_for_key(
+            "space",
+            mods(true, false, false, false),
+            false,
+            true,
+            (0.0, -200.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(shift_space, (0.0, -110.0)), "{shift_space:?}");
     }
 
     #[test]
     fn home_end_target_primary_axis() {
         // Vertical container: Home -> top, End -> bottom (Y).
-        let home = scroll_offset_for_key("home", none(), false, true, (0.0, -500.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let home = scroll_offset_for_key(
+            "home",
+            none(),
+            false,
+            true,
+            (0.0, -500.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(home, (0.0, 0.0)), "{home:?}");
-        let end = scroll_offset_for_key("end", none(), false, true, (0.0, -100.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let end = scroll_offset_for_key(
+            "end",
+            none(),
+            false,
+            true,
+            (0.0, -100.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(end, (0.0, -900.0)), "{end:?}");
         // Horizontal-only container: Home/End act on X.
-        let home_x = scroll_offset_for_key("home", none(), true, false, (-500.0, 0.0), (900.0, 0.0), (100.0, 100.0)).unwrap();
+        let home_x = scroll_offset_for_key(
+            "home",
+            none(),
+            true,
+            false,
+            (-500.0, 0.0),
+            (900.0, 0.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(home_x, (0.0, 0.0)), "{home_x:?}");
-        let end_x = scroll_offset_for_key("end", none(), true, false, (-100.0, 0.0), (900.0, 0.0), (100.0, 100.0)).unwrap();
+        let end_x = scroll_offset_for_key(
+            "end",
+            none(),
+            true,
+            false,
+            (-100.0, 0.0),
+            (900.0, 0.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(end_x, (-900.0, 0.0)), "{end_x:?}");
     }
 
     #[test]
     fn clamps_at_both_ends() {
         // Down at the bottom stays at -max (no over-scroll).
-        let bottom = scroll_offset_for_key("down", none(), false, true, (0.0, -900.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let bottom = scroll_offset_for_key(
+            "down",
+            none(),
+            false,
+            true,
+            (0.0, -900.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(bottom, (0.0, -900.0)), "{bottom:?}");
         // Up at the top stays at 0.
-        let top = scroll_offset_for_key("up", none(), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let top = scroll_offset_for_key(
+            "up",
+            none(),
+            false,
+            true,
+            (0.0, 0.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(top, (0.0, 0.0)), "{top:?}");
         // PageUp near the top clamps to 0 rather than going positive.
-        let pu = scroll_offset_for_key("pageup", none(), false, true, (0.0, -50.0), (0.0, 900.0), (100.0, 100.0)).unwrap();
+        let pu = scroll_offset_for_key(
+            "pageup",
+            none(),
+            false,
+            true,
+            (0.0, -50.0),
+            (0.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(pu, (0.0, 0.0)), "{pu:?}");
     }
 
@@ -203,39 +346,165 @@ mod tests {
     fn modifier_chords_pass_through() {
         // Ctrl / Alt / Cmd never scroll.
         assert!(vert((0.0, 0.0)).is_some()); // sanity: plain Down scrolls
-        assert_eq!(scroll_offset_for_key("down", mods(false, true, false, false), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)), None);
-        assert_eq!(scroll_offset_for_key("down", mods(false, false, true, false), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)), None);
-        assert_eq!(scroll_offset_for_key("down", mods(false, false, false, true), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)), None);
+        assert_eq!(
+            scroll_offset_for_key(
+                "down",
+                mods(false, true, false, false),
+                false,
+                true,
+                (0.0, 0.0),
+                (0.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
+        assert_eq!(
+            scroll_offset_for_key(
+                "down",
+                mods(false, false, true, false),
+                false,
+                true,
+                (0.0, 0.0),
+                (0.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
+        assert_eq!(
+            scroll_offset_for_key(
+                "down",
+                mods(false, false, false, true),
+                false,
+                true,
+                (0.0, 0.0),
+                (0.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
     }
 
     #[test]
     fn shift_arrow_passes_through() {
         // Shift only participates in Shift+Space; Shift+Arrow passes through.
-        assert_eq!(scroll_offset_for_key("down", mods(true, false, false, false), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)), None);
-        assert_eq!(scroll_offset_for_key("home", mods(true, false, false, false), false, true, (0.0, -500.0), (0.0, 900.0), (100.0, 100.0)), None);
+        assert_eq!(
+            scroll_offset_for_key(
+                "down",
+                mods(true, false, false, false),
+                false,
+                true,
+                (0.0, 0.0),
+                (0.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
+        assert_eq!(
+            scroll_offset_for_key(
+                "home",
+                mods(true, false, false, false),
+                false,
+                true,
+                (0.0, -500.0),
+                (0.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
     }
 
     #[test]
     fn wrong_axis_keys_pass_through() {
         // Horizontal keys on a vertical-only container, and vice versa.
-        assert_eq!(scroll_offset_for_key("left", none(), false, true, (0.0, 0.0), (0.0, 900.0), (100.0, 100.0)), None);
-        assert_eq!(scroll_offset_for_key("down", none(), true, false, (0.0, 0.0), (900.0, 0.0), (100.0, 100.0)), None);
+        assert_eq!(
+            scroll_offset_for_key(
+                "left",
+                none(),
+                false,
+                true,
+                (0.0, 0.0),
+                (0.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
+        assert_eq!(
+            scroll_offset_for_key(
+                "down",
+                none(),
+                true,
+                false,
+                (0.0, 0.0),
+                (900.0, 0.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
     }
 
     #[test]
     fn unknown_keys_pass_through() {
-        assert_eq!(scroll_offset_for_key("enter", none(), true, true, (0.0, 0.0), (900.0, 900.0), (100.0, 100.0)), None);
-        assert_eq!(scroll_offset_for_key("a", none(), true, true, (0.0, 0.0), (900.0, 900.0), (100.0, 100.0)), None);
+        assert_eq!(
+            scroll_offset_for_key(
+                "enter",
+                none(),
+                true,
+                true,
+                (0.0, 0.0),
+                (900.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
+        assert_eq!(
+            scroll_offset_for_key(
+                "a",
+                none(),
+                true,
+                true,
+                (0.0, 0.0),
+                (900.0, 900.0),
+                (100.0, 100.0)
+            ),
+            None
+        );
     }
 
     #[test]
     fn both_axes_route_keys_independently() {
         // A container scrolling on both axes: Down -> Y, Right -> X, Home -> Y.
-        let down = scroll_offset_for_key("down", none(), true, true, (-10.0, -10.0), (900.0, 900.0), (100.0, 100.0)).unwrap();
+        let down = scroll_offset_for_key(
+            "down",
+            none(),
+            true,
+            true,
+            (-10.0, -10.0),
+            (900.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(down, (-10.0, -50.0)), "{down:?}");
-        let right = scroll_offset_for_key("right", none(), true, true, (-10.0, -10.0), (900.0, 900.0), (100.0, 100.0)).unwrap();
+        let right = scroll_offset_for_key(
+            "right",
+            none(),
+            true,
+            true,
+            (-10.0, -10.0),
+            (900.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(right, (-50.0, -10.0)), "{right:?}");
-        let home = scroll_offset_for_key("home", none(), true, true, (-10.0, -500.0), (900.0, 900.0), (100.0, 100.0)).unwrap();
+        let home = scroll_offset_for_key(
+            "home",
+            none(),
+            true,
+            true,
+            (-10.0, -500.0),
+            (900.0, 900.0),
+            (100.0, 100.0),
+        )
+        .unwrap();
         assert!(approx(home, (-10.0, 0.0)), "{home:?}");
     }
 }

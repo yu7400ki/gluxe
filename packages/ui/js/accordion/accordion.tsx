@@ -1,9 +1,4 @@
-import {
-  type GpuiKeyboardEvent,
-  type GpuiMouseEvent,
-  View,
-  type ViewProps,
-} from "@gluxe/react";
+import { type GpuiKeyboardEvent, type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
 import { Button } from "../button/button";
