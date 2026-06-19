@@ -40,6 +40,10 @@
     "./focus": {
       "import": "./dist/focus.mjs",
       "types": "./dist/focus.d.mts"
+    },
+    "./components": {
+      "import": "./dist/components.mjs",
+      "types": "./dist/components.d.mts"
     }
   },
   "publishConfig": {

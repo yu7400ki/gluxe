@@ -474,6 +474,9 @@ pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
                 SCROLL_HANDLES.with(|handles| {
                     handles.borrow_mut().remove(id);
                 });
+                // A scrollbar targeting this node may have a drag in progress;
+                // drop it so a stale grab can't outlive the node (its id reuse).
+                crate::scrollbar::clear_scrollbar_drag_for(*id);
                 TEXT_INPUTS.with(|inputs| {
                     inputs.borrow_mut().remove(id);
                 });

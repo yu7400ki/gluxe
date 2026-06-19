@@ -25,6 +25,7 @@ mod macro_support;
 mod model;
 mod plugin;
 mod render;
+mod scrollbar;
 mod stack;
 mod state;
 mod style;
@@ -420,6 +421,8 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
     plugin::register_plugins(options.plugins);
     // Register native components before eval so `createInstance` can resolve
     // their element-type names during the very first reconciliation pass.
+    // Built-ins (reserved `__` names) go first so apps can't shadow them.
+    component::register_builtin_components();
     component::register_components(options.components);
 
     let (bundle, asset_source, bundle_config) = source.resolve();

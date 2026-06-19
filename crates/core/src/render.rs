@@ -391,6 +391,7 @@ pub(crate) fn clear_node_views() {
     WINDOW_MOVE_STARTED.set(false);
     ANCHOR_NAMES.with(|m| m.borrow_mut().clear());
     ANCHOR_BOUNDS.with(|m| m.borrow_mut().clear());
+    crate::scrollbar::clear_scrollbar_drag();
 }
 
 fn render_child(id: ElementId, cx: &mut App) -> Option<AnyElement> {

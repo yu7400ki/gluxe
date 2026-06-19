@@ -56,12 +56,32 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
+/// Register the framework's built-in native components (reserved `__` names that
+/// apps can't shadow). Called before [`register_components`] so the reserved
+/// types resolve during the very first reconciliation pass.
+pub(crate) fn register_builtin_components() {
+    COMPONENTS.with(|c| {
+        c.borrow_mut().insert(
+            "__GluxeScrollbar".to_string(),
+            Box::new(|ctx: NativeRenderContext| crate::scrollbar::build_scrollbar(ctx.props)),
+        );
+    });
+}
+
 /// Insert components into the registry. Must be called before the JS bundle
 /// is evaluated so `parse_kind` can resolve native types during reconciliation.
+///
+/// The reserved `__` namespace is owned by [`register_builtin_components`]; user
+/// components must not use it (mirrors the plugin-name rule in `plugin.rs`).
 pub(crate) fn register_components(list: Vec<Component>) {
     COMPONENTS.with(|c| {
         let mut map = c.borrow_mut();
         for component in list {
+            assert!(
+                !component.name.starts_with("__"),
+                "component name `{}` is reserved (the `__` prefix is for built-ins)",
+                component.name
+            );
             map.insert(component.name, component.render);
         }
     });

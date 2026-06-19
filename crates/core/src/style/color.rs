@@ -27,7 +27,7 @@ fn parse_alpha(s: &str) -> Option<f32> {
 /// - `"rgb(r, g, b)"` / `"rgba(r, g, b, a)"` — r/g/b 0–255; a 0.0–1.0
 /// - `"hsl(h, s%, l%)"` / `"hsla(h, s%, l%, a)"` — h degrees; s/l percent; a 0.0–1.0
 /// - CSS named colors (e.g. `"red"`, `"tomato"`, `"cornflowerblue"`)
-pub(super) fn parse_color(s: &str) -> Option<Rgba> {
+pub(crate) fn parse_color(s: &str) -> Option<Rgba> {
     let s = s.trim();
 
     if s.starts_with('#') {

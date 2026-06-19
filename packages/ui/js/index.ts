@@ -48,7 +48,12 @@ export type {
 } from "./disclosure/disclosure";
 
 // ---- Accordion ----
-export { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./accordion/accordion";
+export {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./accordion/accordion";
 export type {
   AccordionContentProps,
   AccordionItemProps,
@@ -70,3 +75,19 @@ export type {
   TabsTriggerProps,
   TabsTriggerState,
 } from "./tabs/tabs";
+
+// ---- ScrollArea ----
+export {
+  ScrollArea,
+  ScrollAreaScrollbar,
+  ScrollAreaThumb,
+  ScrollAreaViewport,
+} from "./scroll-area/scroll-area";
+export type {
+  ScrollAreaOrientation,
+  ScrollAreaProps,
+  ScrollAreaScrollbarProps,
+  ScrollAreaThumbProps,
+  ScrollAreaThumbStyle,
+  ScrollAreaViewportProps,
+} from "./scroll-area/scroll-area";
