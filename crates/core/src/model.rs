@@ -489,25 +489,46 @@ pub(crate) struct Tree {
 
 impl Tree {
     /// Tab-stop focusables in `root`'s subtree (root included when it qualifies),
-    /// in GPUI `focus_next` order: ascending `tabIndex` (default `0`), ties by
-    /// preorder. Backs `getFocusableElements`.
+    /// in Tab order. Backs `getFocusableElements` and the active Tab scope.
     pub(crate) fn focusable_descendants(&self, root: ElementId) -> Vec<ElementId> {
-        // (tab_index, preorder index, id) — sorted to match GPUI's TabStopMap.
+        self.collect_tab_stops(std::iter::once(root))
+    }
+
+    /// The window-global Tab order: every tab stop across the root children, in the
+    /// order Tab visits them. The single source of truth for `RootView::navigate_tab`
+    /// when no Tab scope is active (gpui's own focus_next is not consulted).
+    pub(crate) fn focusable_order(&self) -> Vec<ElementId> {
+        self.collect_tab_stops(self.root_children.iter().copied())
+    }
+
+    /// Collect tab stops under `roots` in Tab order: ascending `tabIndex` (default
+    /// `0`), ties by preorder (≈ paint order). `display:none` / `visibility:hidden`
+    /// subtrees are skipped entirely, matching what GPUI leaves out of its tab map.
+    fn collect_tab_stops(&self, roots: impl Iterator<Item = ElementId>) -> Vec<ElementId> {
+        // (tab_index, preorder index, id). One shared counter across all roots so
+        // the global order matches a single preorder walk.
         let mut found: Vec<(i32, usize, ElementId)> = Vec::new();
         let mut order: usize = 0;
-        let mut stack: Vec<ElementId> = vec![root];
-        // Preorder DFS; push children reversed so they pop in document order.
+        // Reverse so the first root is processed first (LIFO stack).
+        let mut stack: Vec<ElementId> = roots.collect();
+        stack.reverse();
         while let Some(id) = stack.pop() {
             let Some(node) = self.nodes.get(&id) else {
                 continue;
             };
+            let style = &node.props.style;
+            // Hidden subtree: not laid out / not painted → not Tab-reachable. Skip
+            // it and its descendants (no recursion).
+            if style.display.as_deref() == Some("none")
+                || style.visibility.as_deref() == Some("hidden")
+            {
+                continue;
+            }
             let props = &node.props;
             // TextInput is intrinsically focusable; View/Image only with a focus
             // prop. The tab_stop default is single-sourced in `resolve_tab_stop`.
             let is_text_input = matches!(node.kind, ElementKind::TextInput);
-            let is_tab_stop =
-                (is_text_input || props.is_focusable()) && props.resolve_tab_stop(is_text_input);
-            if is_tab_stop {
+            if (is_text_input || props.is_focusable()) && props.resolve_tab_stop(is_text_input) {
                 found.push((props.tab_index.unwrap_or(0), order, id));
             }
             order += 1;
@@ -1154,6 +1175,47 @@ mod tests {
             },
         );
         assert!(tree.focusable_descendants(1).is_empty());
+    }
+
+    #[test]
+    fn focusable_order_sorts_globally_across_root_children() {
+        let mut tree = Tree::default();
+        // Root children in mount order: a tabIndex-5 stop first, then two tabIndex-0.
+        apply_command(&mut tree, make_tabbable_instance(10, Some(5)));
+        apply_command(&mut tree, make_tabbable_instance(11, Some(0)));
+        apply_command(&mut tree, make_tabbable_instance(12, Some(0)));
+        for child in [10, 11, 12] {
+            apply_command(&mut tree, UICommand::AppendToContainer { child });
+        }
+        // tabIndex sorts globally: the two 0s (preorder) before the 5, even though
+        // the 5 mounted first.
+        assert_eq!(tree.focusable_order(), vec![11, 12, 10]);
+    }
+
+    #[test]
+    fn collect_tab_stops_skips_hidden_subtrees() {
+        for hide in ["display", "visibility"] {
+            let mut tree = Tree::default();
+            let mut props = Props::default();
+            props.tab_index = Some(0); // the container is itself a stop...
+            if hide == "display" {
+                props.style.display = Some("none".to_string());
+            } else {
+                props.style.visibility = Some("hidden".to_string());
+            }
+            apply_command(
+                &mut tree,
+                UICommand::CreateInstance {
+                    id: 1,
+                    kind: ElementKind::View,
+                    props,
+                },
+            );
+            apply_command(&mut tree, make_tabbable_instance(2, Some(0))); // ...with a focusable child
+            apply_command(&mut tree, UICommand::AppendChild { parent: 1, child: 2 });
+            // Both the hidden container and its subtree are out of the Tab order.
+            assert!(tree.focusable_descendants(1).is_empty(), "{hide}");
+        }
     }
 
     #[test]

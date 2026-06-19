@@ -1133,6 +1133,12 @@ pub(crate) fn focusable_descendants(root: ElementId) -> Vec<ElementId> {
     with_tree(|tree| tree.focusable_descendants(root))
 }
 
+/// The window-global Tab order (see [`Tree::focusable_order`]). Used by
+/// `navigate_tab` when no Tab scope is active.
+pub(crate) fn focusable_order() -> Vec<ElementId> {
+    with_tree(|tree| tree.focusable_order())
+}
+
 /// Mark `id` as having received its initial autoFocus. Returns `true` the first
 /// time for a given `id` (caller should then call `window.focus`), `false` on
 /// subsequent calls (no-op to avoid stealing focus back on every re-render).

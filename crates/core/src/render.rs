@@ -785,38 +785,22 @@ impl RootView {
         }
     }
 
-    /// If focus has fallen to the root fallback / nothing (after blur or a click
-    /// elsewhere), restore it to the last focused element so Tab resumes from there
-    /// instead of the first stop. The anchor is kept current by `render`. Restoring
-    /// then `focus_next` fires no spurious events — gpui coalesces focus per frame.
-    fn resume_focus_anchor(&self, window: &mut Window, cx: &mut App) {
-        let on_real_element = window.focused(cx).is_some() && !self.focus_handle.is_focused(window);
-        if !on_real_element {
-            if let Some(prev) = crate::state::focus_anchor() {
-                if let Some(handle) = crate::state::get_focus_handle(prev, cx) {
-                    window.focus(&handle, cx);
-                }
-            }
-        }
-    }
-
-    /// Handle Tab (`prev=false`) / Shift+Tab (`prev=true`): confine to the active
-    /// Tab scope's subtree if any, else GPUI's window-global focus_next/prev.
+    /// Handle Tab (`prev=false`) / Shift+Tab (`prev=true`). gluxe owns Tab order:
+    /// navigate within the active Tab scope's subtree, or the window-global order
+    /// when none. The tree (`focusable_order`/`focusable_descendants`) is the single
+    /// source of truth — GPUI's own `focus_next` is not consulted. When focus has
+    /// fallen to the root, resume from the last-focused element (the anchor) so Tab
+    /// continues from there rather than restarting at the first stop.
     fn navigate_tab(&self, prev: bool, window: &mut Window, cx: &mut App) {
-        if let Some(scope) = crate::state::active_tab_scope() {
-            let order = crate::state::focusable_descendants(scope);
-            let current = crate::state::active_element_id(window, cx);
-            if let Some(target) = crate::state::scope_tab_target(&order, current, prev) {
-                if let Some(handle) = crate::state::get_focus_handle(target, cx) {
-                    window.focus(&handle, cx);
-                }
-            }
-        } else {
-            self.resume_focus_anchor(window, cx);
-            if prev {
-                window.focus_prev(cx);
-            } else {
-                window.focus_next(cx);
+        let order = match crate::state::active_tab_scope() {
+            Some(scope) => crate::state::focusable_descendants(scope),
+            None => crate::state::focusable_order(),
+        };
+        let current =
+            crate::state::active_element_id(window, cx).or_else(crate::state::focus_anchor);
+        if let Some(target) = crate::state::scope_tab_target(&order, current, prev) {
+            if let Some(handle) = crate::state::get_focus_handle(target, cx) {
+                window.focus(&handle, cx);
             }
         }
     }
@@ -850,7 +834,7 @@ impl RootView {
 
 impl Render for RootView {
     fn render(&mut self, window: &mut Window, cx: &mut GpuiContext<Self>) -> impl IntoElement {
-        // Record the focused element as the Tab resume anchor (see resume_focus_anchor).
+        // Record the focused element as the Tab resume anchor (see navigate_tab).
         if let Some(id) = crate::state::focused_element_id(window) {
             crate::state::set_focus_anchor(Some(id));
         }
