@@ -5,10 +5,8 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import spawn from "cross-spawn";
-
 import { BUNDLE_MANIFEST_FILE, getRecord, readBundleOutDir, readDevBuildConfig } from "./config.js";
-import { killTree } from "./process.js";
+import { type Child, onSignals, ProcessSupervisor } from "./process.js";
 import { ensureCargoToml, resolveProject } from "./project.js";
 
 // Snapshot the manifest mtime before the watch build starts so stale output
@@ -106,9 +104,13 @@ export async function startProject(projectArg: string): Promise<void> {
   // manually. On Windows, taskkill /T handles the tree without detaching.
   const detached = process.platform !== "win32";
 
+  // One supervisor owns both children; killAll() is the single teardown shared
+  // by the first-build wait and the running-app supervision below.
+  const supervisor = new ProcessSupervisor();
+
   const suffix = devConfig.args.length > 0 ? ` ${devConfig.args.join(" ")}` : "";
   console.log(`-> Starting JS watch build: ${devConfig.command}${suffix}`);
-  const watcher = spawn(devConfig.command, devConfig.args, {
+  const watcher = supervisor.spawn(devConfig.command, devConfig.args, {
     cwd: devConfig.cwd,
     stdio: "inherit",
     detached,
@@ -122,53 +124,67 @@ export async function startProject(projectArg: string): Promise<void> {
     watcherDeath = error.message;
   });
 
-  // Signal handler during the first-build wait: kill the detached watcher
-  // before exiting (full app+watcher handling is installed after the app spawns).
-  const onFirstBuildSignal = () => {
-    killTree(watcher);
+  // During the first-build wait, a signal just tears the watcher down and exits
+  // (full app+watcher supervision is installed once the app spawns).
+  const removeFirstBuildSignals = onSignals(() => {
+    supervisor.killAll();
     process.exit(1);
-  };
-  process.on("SIGINT", onFirstBuildSignal);
-  process.on("SIGTERM", onFirstBuildSignal);
-
+  });
   try {
     await waitForFirstBuild(dist, prevManifestMtime, () => watcherDeath);
   } catch (error) {
-    process.off("SIGINT", onFirstBuildSignal);
-    process.off("SIGTERM", onFirstBuildSignal);
-    killTree(watcher);
+    supervisor.killAll();
     throw error;
+  } finally {
+    removeFirstBuildSignals();
   }
-  process.off("SIGINT", onFirstBuildSignal);
-  process.off("SIGTERM", onFirstBuildSignal);
 
   console.log(`-> Launching app (debug build) with GLUXE_DEV_DIST=${dist}`);
-  const app = spawn("cargo", ["run"], {
+  const app = supervisor.spawn("cargo", ["run"], {
     cwd: project,
     stdio: "inherit",
     detached,
     env: { ...process.env, GLUXE_DEV_DIST: dist },
   });
 
+  return superviseApp(
+    app,
+    watcher,
+    () => watcherDeath,
+    () => supervisor.killAll(),
+  );
+}
+
+/**
+ * Supervise the running app against the watch build: resolve when the app exits
+ * cleanly (or once we initiated shutdown), reject if it crashes or if the watch
+ * build — which should outlive it — dies first. `killAll` tears down both
+ * children (see {@link ProcessSupervisor}); it is safe to call on every path
+ * because killTree no-ops on already-dead children. A SIGINT/SIGTERM tears both
+ * down and resolves. Pure of any spawning, so it is unit-tested with fake
+ * children.
+ */
+export function superviseApp(
+  app: Child,
+  watcher: Child,
+  watcherDeath: () => string | null,
+  killAll: () => void,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false;
     let shuttingDown = false;
 
-    const onSignal = () => {
+    const removeSignals = onSignals(() => {
       shuttingDown = true;
-      killTree(app);
-      killTree(watcher);
-    };
-    process.on("SIGINT", onSignal);
-    process.on("SIGTERM", onSignal);
+      killAll();
+    });
 
     const finish = (error?: Error) => {
       if (settled) {
         return;
       }
       settled = true;
-      process.off("SIGINT", onSignal);
-      process.off("SIGTERM", onSignal);
+      removeSignals();
       if (error) {
         reject(error);
       } else {
@@ -177,11 +193,11 @@ export async function startProject(projectArg: string): Promise<void> {
     };
 
     app.on("error", (error) => {
-      killTree(watcher);
+      killAll();
       finish(new Error(`failed to run \`cargo run\`: ${error.message}`));
     });
     app.on("exit", (code, signal) => {
-      killTree(watcher);
+      killAll();
       if (code === 0 || shuttingDown) {
         finish();
       } else if (signal) {
@@ -193,8 +209,8 @@ export async function startProject(projectArg: string): Promise<void> {
     watcher.on("exit", () => {
       // The watch build should outlive the app; dying first is an error unless we initiated shutdown.
       if (!settled && !shuttingDown) {
-        killTree(app);
-        finish(new Error(`JS watch build exited unexpectedly (${watcherDeath})`));
+        killAll();
+        finish(new Error(`JS watch build exited unexpectedly (${watcherDeath()})`));
       }
     });
   });

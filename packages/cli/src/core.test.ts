@@ -1,12 +1,14 @@
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { validateKnownOptions } from "./args.js";
 import { readBundleBuildConfig, readBundleOutDir, readDevBuildConfig } from "./config.js";
-import { checkManifestReady, manifestMtime, waitForFirstBuild } from "./dev.js";
+import { checkManifestReady, manifestMtime, superviseApp, waitForFirstBuild } from "./dev.js";
+import { type Child, ProcessSupervisor, type Spawn } from "./process.js";
 import { createCargoCommand, ensureCargoToml } from "./project.js";
 
 describe("readBundleBuildConfig", () => {
@@ -287,6 +289,83 @@ describe("validateKnownOptions", () => {
     expect(() => validateKnownOptions(["build", "-x"])).toThrow("unexpected option '-x'");
   });
 });
+
+describe("ProcessSupervisor", () => {
+  it("killAll tears down every spawned child via the injected kill", () => {
+    const children = [new EventEmitter(), new EventEmitter()] as unknown as Child[];
+    let next = 0;
+    const spawnFn = (() => children[next++]) as unknown as Spawn;
+    const killed: Child[] = [];
+    const supervisor = new ProcessSupervisor(spawnFn, (child) => killed.push(child));
+
+    const a = supervisor.spawn("watch", [], {});
+    const b = supervisor.spawn("cargo", ["run"], {});
+
+    expect([a, b]).toEqual(children);
+    supervisor.killAll();
+    expect(killed).toEqual(children);
+  });
+});
+
+describe("superviseApp", () => {
+  it("resolves and tears down when the app exits cleanly", async () => {
+    const app = new EventEmitter();
+    const killAll = vi.fn();
+    const promise = supervise(app, new EventEmitter(), killAll);
+    app.emit("exit", 0, null);
+    await expect(promise).resolves.toBeUndefined();
+    expect(killAll).toHaveBeenCalled();
+  });
+
+  it("rejects with the exit status when the app exits non-zero", async () => {
+    const app = new EventEmitter();
+    const promise = supervise(app, new EventEmitter(), vi.fn());
+    app.emit("exit", 2, null);
+    await expect(promise).rejects.toThrow("`cargo run` exited with status 2");
+  });
+
+  it("rejects with the signal when the app is killed by one", async () => {
+    const app = new EventEmitter();
+    const promise = supervise(app, new EventEmitter(), vi.fn());
+    app.emit("exit", null, "SIGKILL");
+    await expect(promise).rejects.toThrow("`cargo run` exited with signal SIGKILL");
+  });
+
+  it("rejects when the app fails to spawn", async () => {
+    const app = new EventEmitter();
+    const promise = supervise(app, new EventEmitter(), vi.fn());
+    app.emit("error", new Error("ENOENT"));
+    await expect(promise).rejects.toThrow("failed to run `cargo run`: ENOENT");
+  });
+
+  it("rejects and tears down when the watch build dies first", async () => {
+    const watcher = new EventEmitter();
+    const killAll = vi.fn();
+    const promise = supervise(new EventEmitter(), watcher, killAll, () => "status 1");
+    watcher.emit("exit", 1, null);
+    await expect(promise).rejects.toThrow("JS watch build exited unexpectedly (status 1)");
+    expect(killAll).toHaveBeenCalled();
+  });
+
+  it("settles once — a late watcher exit cannot flip a resolved run", async () => {
+    const app = new EventEmitter();
+    const watcher = new EventEmitter();
+    const promise = supervise(app, watcher, vi.fn());
+    app.emit("exit", 0, null);
+    watcher.emit("exit", 0, null);
+    await expect(promise).resolves.toBeUndefined();
+  });
+});
+
+// Drive superviseApp with fake EventEmitter children (cast to Child).
+function supervise(
+  app: EventEmitter,
+  watcher: EventEmitter,
+  killAll: () => void,
+  death: () => string | null = () => null,
+): Promise<void> {
+  return superviseApp(app as unknown as Child, watcher as unknown as Child, death, killAll);
+}
 
 async function createTempProject(files: Record<string, string> = {}): Promise<string> {
   const project = await mkdtemp(path.join(os.tmpdir(), "gluxe-cli-"));
