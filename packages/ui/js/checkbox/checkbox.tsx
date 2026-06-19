@@ -1,11 +1,11 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
-import { Button } from "./button";
-import { composeEventHandlers } from "./internal/compose";
-import { createSafeContext } from "./internal/context";
-import { useControllableState } from "./internal/controllable-state";
-import { renderSlot, type Slot } from "./internal/slot";
+import { Button } from "../button/button";
+import { composeEventHandlers } from "../internal/compose";
+import { createSafeContext } from "../internal/context";
+import { useControllableState } from "../internal/controllable-state";
+import { renderSlot, type Slot } from "../internal/slot";
 
 /** The three possible checked states of a {@link Checkbox}. */
 export type CheckedState = boolean | "indeterminate";

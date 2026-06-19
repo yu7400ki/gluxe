@@ -8,47 +8,47 @@
 export type { Slot } from "./internal/slot";
 
 // ---- Button ----
-export { Button } from "./button";
-export type { ButtonProps } from "./button";
+export { Button } from "./button/button";
+export type { ButtonProps } from "./button/button";
 
 // ---- Toggle ----
-export { Toggle } from "./toggle";
-export type { ToggleProps, ToggleState } from "./toggle";
+export { Toggle } from "./toggle/toggle";
+export type { ToggleProps, ToggleState } from "./toggle/toggle";
 
 // ---- Checkbox ----
-export { Checkbox, CheckboxIndicator } from "./checkbox";
+export { Checkbox, CheckboxIndicator } from "./checkbox/checkbox";
 export type {
   CheckboxIndicatorProps,
   CheckboxProps,
   CheckboxState,
   CheckedState,
-} from "./checkbox";
+} from "./checkbox/checkbox";
 
 // ---- Switch ----
-export { Switch, SwitchThumb } from "./switch";
-export type { SwitchProps, SwitchState, SwitchThumbProps } from "./switch";
+export { Switch, SwitchThumb } from "./switch/switch";
+export type { SwitchProps, SwitchState, SwitchThumbProps } from "./switch/switch";
 
 // ---- RadioGroup ----
-export { RadioGroup, RadioGroupIndicator, RadioGroupItem } from "./radio-group";
+export { RadioGroup, RadioGroupIndicator, RadioGroupItem } from "./radio-group/radio-group";
 export type {
   RadioGroupIndicatorProps,
   RadioGroupItemProps,
   RadioGroupProps,
   RadioGroupState,
   RadioItemState,
-} from "./radio-group";
+} from "./radio-group/radio-group";
 
 // ---- Disclosure (Collapsible) ----
-export { Disclosure, DisclosureContent, DisclosureTrigger } from "./disclosure";
+export { Disclosure, DisclosureContent, DisclosureTrigger } from "./disclosure/disclosure";
 export type {
   DisclosureContentProps,
   DisclosureProps,
   DisclosureState,
   DisclosureTriggerProps,
-} from "./disclosure";
+} from "./disclosure/disclosure";
 
 // ---- Accordion ----
-export { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./accordion";
+export { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./accordion/accordion";
 export type {
   AccordionContentProps,
   AccordionItemProps,
@@ -57,10 +57,10 @@ export type {
   AccordionProps,
   AccordionSingleProps,
   AccordionTriggerProps,
-} from "./accordion";
+} from "./accordion/accordion";
 
 // ---- Tabs ----
-export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
+export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs/tabs";
 export type {
   TabsActivationMode,
   TabsContentProps,
@@ -69,4 +69,4 @@ export type {
   TabsProps,
   TabsTriggerProps,
   TabsTriggerState,
-} from "./tabs";
+} from "./tabs/tabs";

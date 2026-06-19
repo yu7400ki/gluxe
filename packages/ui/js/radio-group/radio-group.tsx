@@ -1,12 +1,12 @@
 import { type GpuiKeyboardEvent, type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useMemo } from "react";
 
-import { composeEventHandlers } from "./internal/compose";
-import { createSafeContext } from "./internal/context";
-import { useControllableState } from "./internal/controllable-state";
-import { mergeRefs } from "./internal/merge-refs";
-import { type RovingFocus, useRovingFocus, useRovingItem } from "./internal/roving-focus";
-import { renderSlot, type Slot } from "./internal/slot";
+import { composeEventHandlers } from "../internal/compose";
+import { createSafeContext } from "../internal/context";
+import { useControllableState } from "../internal/controllable-state";
+import { mergeRefs } from "../internal/merge-refs";
+import { type RovingFocus, useRovingFocus, useRovingItem } from "../internal/roving-focus";
+import { renderSlot, type Slot } from "../internal/slot";
 
 /** State the RadioGroup root exposes to its render-function children. */
 export interface RadioGroupState {

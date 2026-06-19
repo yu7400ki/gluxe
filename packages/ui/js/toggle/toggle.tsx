@@ -1,10 +1,10 @@
 import { type GpuiMouseEvent, type ViewProps } from "@gluxe/react";
 import React from "react";
 
-import { Button } from "./button";
-import { composeEventHandlers } from "./internal/compose";
-import { useControllableState } from "./internal/controllable-state";
-import { renderSlot, type Slot } from "./internal/slot";
+import { Button } from "../button/button";
+import { composeEventHandlers } from "../internal/compose";
+import { useControllableState } from "../internal/controllable-state";
+import { renderSlot, type Slot } from "../internal/slot";
 
 /** State the Toggle exposes to its render-function children. */
 export interface ToggleState {
