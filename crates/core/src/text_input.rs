@@ -80,6 +80,9 @@ pub(crate) struct TextInputState {
     caret_width: Option<LengthValue>,
     /// Selection-highlight colour, mirrored from `style.selectionColor`. `None` → default.
     selection_color: Option<Rgba>,
+    /// Placeholder text colour, mirrored from `style.placeholderColor`. `None` →
+    /// built-in translucent black.
+    placeholder_color: Option<Rgba>,
 
     /// `multiline` prop, mirrored each render. Drives Enter/paste behaviour and the
     /// `shape_text` rendering path.
@@ -156,6 +159,7 @@ impl TextInputState {
             caret_color: None,
             caret_width: None,
             selection_color: None,
+            placeholder_color: None,
             multiline: false,
             min_rows: None,
             max_rows: None,
@@ -918,6 +922,7 @@ impl Render for TextInputState {
             caret_color,
             caret_width,
             selection_color,
+            placeholder_color,
             multiline,
             min_rows,
             max_rows,
@@ -933,6 +938,7 @@ impl Render for TextInputState {
                 e.props.style.caret_color,
                 e.props.style.caret_width,
                 e.props.style.selection_color,
+                e.props.style.placeholder_color,
                 e.props.multiline,
                 e.props.min_rows,
                 e.props.max_rows,
@@ -943,6 +949,7 @@ impl Render for TextInputState {
                 None,
                 None,
                 true,
+                None,
                 None,
                 None,
                 None,
@@ -958,6 +965,7 @@ impl Render for TextInputState {
         self.caret_color = caret_color;
         self.caret_width = caret_width;
         self.selection_color = selection_color;
+        self.placeholder_color = placeholder_color;
         self.multiline = multiline;
         self.min_rows = min_rows;
         self.max_rows = max_rows;
@@ -1158,13 +1166,18 @@ impl Element for TextElement {
         let caret_color = input.caret_color;
         let caret_width = input.caret_width;
         let selection_color = input.selection_color;
+        let placeholder_color = input.placeholder_color;
         let prev_scroll = input.scroll_top;
         let autoscroll = input.autoscroll;
         let focused = input.focus_handle.is_focused(window);
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
-            (placeholder, gpui::hsla(0., 0., 0., 0.35))
+            // Placeholder colour: `placeholderColor` style prop, else translucent black.
+            let color = placeholder_color
+                .map(gpui::Hsla::from)
+                .unwrap_or_else(|| gpui::hsla(0., 0., 0., 0.35));
+            (placeholder, color)
         } else {
             (content, style.color)
         };

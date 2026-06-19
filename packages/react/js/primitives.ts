@@ -543,6 +543,9 @@ export interface BaseStyleProps {
   /** `<TextInput>` selection-highlight colour. Use a translucent colour so text
    *  stays legible. Defaults to a translucent blue. Ignored on other elements. */
   selectionColor?: Color;
+  /** `<TextInput>` placeholder text colour. Defaults to a translucent black.
+   *  Ignored on other elements. */
+  placeholderColor?: Color;
 }
 
 export interface StyleProps extends BaseStyleProps {

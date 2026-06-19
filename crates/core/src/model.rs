@@ -274,6 +274,8 @@ pub(crate) struct StyleFields {
     pub(crate) caret_width: Option<LengthValue>,
     /// Selection-highlight background colour. `None` → built-in translucent blue.
     pub(crate) selection_color: Option<Rgba>,
+    /// Placeholder text colour. `None` → built-in translucent black.
+    pub(crate) placeholder_color: Option<Rgba>,
     // ---- Grid ----
     /// Number of equal-width columns (`repeat(N, minmax(0, 1fr))`).
     /// GPUI only supports uniform tracks; arbitrary track lists are unavailable.

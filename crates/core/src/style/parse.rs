@@ -159,6 +159,7 @@ fn apply_simple_field(fields: &mut StyleFields, key: &str, value: &JsValue) {
         "textBackgroundColor" => set!(text_background_color, color_of(value)),
         "caretColor" => set!(caret_color, color_of(value)),
         "selectionColor" => set!(selection_color, color_of(value)),
+        "placeholderColor" => set!(placeholder_color, color_of(value)),
         // Unknown / non-style / composite keys: ignored here.
         _ => {}
     }

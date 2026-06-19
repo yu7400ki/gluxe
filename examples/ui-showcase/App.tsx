@@ -41,6 +41,7 @@ const fieldStyle = {
   lineHeight: 1.5,
   caretColor: theme.accent,
   selectionColor: "rgba(110, 168, 254, 0.3)",
+  placeholderColor: theme.textMuted,
   _focusVisible: { borderColor: theme.accent },
 };
 
