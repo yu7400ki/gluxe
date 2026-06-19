@@ -72,18 +72,23 @@ pub(crate) fn register_builtin_components() {
 /// evaluated so `ElementKind::from_type_name` can resolve native types during
 /// reconciliation.
 ///
-/// The reserved `__` namespace is owned by [`register_builtin_components`]; user
-/// components must not use it (mirrors the plugin-name rule in `plugin.rs`).
+/// Mirrors `plugin.rs`'s `register_plugins`: the reserved `__` namespace is owned
+/// by [`register_builtin_components`] and user components must not use it, and a
+/// duplicate name warns (debug builds) with last-one-wins — same policy as
+/// duplicate plugin command keys.
 pub(crate) fn register_components(list: Vec<Component>) {
     COMPONENTS.with(|c| {
         let mut map = c.borrow_mut();
         for component in list {
+            let Component { name, render } = component;
             assert!(
-                !component.name.starts_with("__"),
-                "component name `{}` is reserved (the `__` prefix is for built-ins)",
-                component.name
+                !name.starts_with("__"),
+                "component name `{name}` is reserved (the `__` prefix is for built-ins)"
             );
-            map.insert(component.name, component.render);
+            if map.insert(name.clone(), render).is_some() {
+                #[cfg(debug_assertions)]
+                eprintln!("[gluxe] component '{name}' registered twice — last one wins");
+            }
         }
     });
 }
