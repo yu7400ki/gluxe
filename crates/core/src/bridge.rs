@@ -46,7 +46,7 @@ fn props_from_args(args: &[JsValue], ctx: &mut JsContext, capture_raw: bool) -> 
 
 pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let create_instance = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let type_str: String = args.first().cloned().unwrap_or_default().try_js_into(ctx)?;
+        let type_str = string_arg(args, 0, ctx)?;
         let kind = ElementKind::from_type_name(&type_str, component::is_registered);
         let capture_raw = kind.is_native();
         let props = props_from_args(&args, ctx, capture_raw);
@@ -56,29 +56,29 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     });
 
     let create_text = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let text: String = args.first().cloned().unwrap_or_default().try_js_into(ctx)?;
+        let text = string_arg(args, 0, ctx)?;
         let id = next_id();
         push_cmd(UICommand::CreateText { id, text });
         Ok(JsValue::from(id as f64))
     });
 
     let append_child = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let parent = element_id_arg(args, 0, ctx)?;
-        let child = element_id_arg(args, 1, ctx)?;
+        let parent = u64_arg(args, 0, ctx)?;
+        let child = u64_arg(args, 1, ctx)?;
         push_cmd(UICommand::AppendChild { parent, child });
         Ok(JsValue::undefined())
     });
 
     let append_to_container = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let child = element_id_arg(args, 0, ctx)?;
+        let child = u64_arg(args, 0, ctx)?;
         push_cmd(UICommand::AppendToContainer { child });
         Ok(JsValue::undefined())
     });
 
     let insert_before = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let parent = element_id_arg(args, 0, ctx)?;
-        let child = element_id_arg(args, 1, ctx)?;
-        let before = element_id_arg(args, 2, ctx)?;
+        let parent = u64_arg(args, 0, ctx)?;
+        let child = u64_arg(args, 1, ctx)?;
+        let before = u64_arg(args, 2, ctx)?;
         push_cmd(UICommand::InsertBefore {
             parent,
             child,
@@ -88,36 +88,31 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     });
 
     let insert_in_container = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let child = element_id_arg(args, 0, ctx)?;
-        let before = element_id_arg(args, 1, ctx)?;
+        let child = u64_arg(args, 0, ctx)?;
+        let before = u64_arg(args, 1, ctx)?;
         push_cmd(UICommand::InsertInContainer { child, before });
         Ok(JsValue::undefined())
     });
 
     let remove_child = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let parent = element_id_arg(args, 0, ctx)?;
-        let child = element_id_arg(args, 1, ctx)?;
+        let parent = u64_arg(args, 0, ctx)?;
+        let child = u64_arg(args, 1, ctx)?;
         push_cmd(UICommand::RemoveChild { parent, child });
         Ok(JsValue::undefined())
     });
 
     let remove_from_container = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let child = element_id_arg(args, 0, ctx)?;
+        let child = u64_arg(args, 0, ctx)?;
         push_cmd(UICommand::RemoveFromContainer { child });
         Ok(JsValue::undefined())
     });
 
     let update_props = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let id = element_id_arg(args, 0, ctx)?;
+        let id = u64_arg(args, 0, ctx)?;
         // 4th arg: element type string from host-config's `commitUpdate`.
         // Re-captures raw props for native components so prop changes reflow;
         // absent/empty for older bundles → non-native path.
-        let type_str: String = args
-            .get(3)
-            .cloned()
-            .unwrap_or_default()
-            .try_js_into(ctx)
-            .unwrap_or_default();
+        let type_str = string_arg_or(args, 3, ctx, "");
         let capture_raw =
             ElementKind::from_type_name(&type_str, component::is_registered).is_native();
         let props = props_from_args(&args, ctx, capture_raw);
@@ -126,8 +121,8 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     });
 
     let update_text = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let id = element_id_arg(args, 0, ctx)?;
-        let text: String = args.get(1).cloned().unwrap_or_default().try_js_into(ctx)?;
+        let id = u64_arg(args, 0, ctx)?;
+        let text = string_arg(args, 1, ctx)?;
         push_cmd(UICommand::UpdateText { id, text });
         Ok(JsValue::undefined())
     });
@@ -138,7 +133,7 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     });
 
     let detach_deleted = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let id = element_id_arg(args, 0, ctx)?;
+        let id = u64_arg(args, 0, ctx)?;
         push_cmd(UICommand::DetachDeleted { id });
         Ok(JsValue::undefined())
     });
@@ -156,7 +151,7 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     // Tab-stop focusable ids in `rootId`'s subtree, in Tab order (last-paint
     // tree). Backs `getFocusableElements(rootId)`. Read-only — no command queued.
     let get_focusable_elements = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let root = element_id_arg(args, 0, ctx)?;
+        let root = u64_arg(args, 0, ctx)?;
         let ids = state::focusable_descendants(root);
         let array = JsArray::from_iter(ids.into_iter().map(|id| JsValue::from(id as f64)), ctx);
         Ok(array.into())
@@ -165,11 +160,11 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     // Push/pop a Tab scope (confine Tab to a subtree). Synchronous thread-local
     // mutation — no command queued; read by FocusNext/FocusPrev.
     let push_tab_scope = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        state::push_tab_scope(element_id_arg(args, 0, ctx)?);
+        state::push_tab_scope(u64_arg(args, 0, ctx)?);
         Ok(JsValue::undefined())
     });
     let pop_tab_scope = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        state::pop_tab_scope(element_id_arg(args, 0, ctx)?);
+        state::pop_tab_scope(u64_arg(args, 0, ctx)?);
         Ok(JsValue::undefined())
     });
 
@@ -196,16 +191,45 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     Ok(())
 }
 
-fn element_id_arg(
-    args: &[JsValue],
-    index: usize,
-    ctx: &mut JsContext,
-) -> boa_engine::JsResult<u64> {
+/// Coerce positional arg `index` to a `u64` (JS numbers are f64). Shared by the
+/// reconciler element ids and the invoke/stream call ids.
+fn u64_arg(args: &[JsValue], index: usize, ctx: &mut JsContext) -> boa_engine::JsResult<u64> {
     Ok(args
         .get(index)
         .cloned()
         .unwrap_or_default()
         .try_js_into::<f64>(ctx)? as u64)
+}
+
+/// Required string positional arg — propagates a JS TypeError when it can't coerce.
+fn string_arg(args: &[JsValue], index: usize, ctx: &mut JsContext) -> boa_engine::JsResult<String> {
+    args.get(index)
+        .cloned()
+        .unwrap_or_default()
+        .try_js_into(ctx)
+}
+
+/// Optional string positional arg — falls back to `default` on absence or
+/// coercion failure (no error).
+fn string_arg_or(args: &[JsValue], index: usize, ctx: &mut JsContext, default: &str) -> String {
+    args.get(index)
+        .cloned()
+        .unwrap_or_default()
+        .try_js_into(ctx)
+        .unwrap_or_else(|_| default.to_string())
+}
+
+/// Parse the `(cmdKey, args)` pair shared by `__invoke` and `__invokeStream`:
+/// positional arg 1 = command-key string (required), arg 2 = a JSON string
+/// (absent/non-string → `"{}"`, then unparseable → `Value::Null`).
+fn parse_invoke_args(
+    args: &[JsValue],
+    ctx: &mut JsContext,
+) -> boa_engine::JsResult<(String, serde_json::Value)> {
+    let key = string_arg(args, 1, ctx)?;
+    let args_json = string_arg_or(args, 2, ctx, "{}");
+    let args_value = serde_json::from_str(&args_json).unwrap_or(serde_json::Value::Null);
+    Ok((key, args_value))
 }
 
 fn set_bridge_fn(
@@ -239,18 +263,8 @@ fn set_bridge_fn(
 /// `__resolveInvoke` to settle the Promise whether the command was sync or async.
 pub(crate) fn register_invoke(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let invoke_fn = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let call_id: f64 = args.first().cloned().unwrap_or_default().try_js_into(ctx)?;
-        let call_id = call_id as u64;
-        let key: String = args.get(1).cloned().unwrap_or_default().try_js_into(ctx)?;
-        let args_json: String = args
-            .get(2)
-            .cloned()
-            .unwrap_or_default()
-            .try_js_into(ctx)
-            .unwrap_or_else(|_| "{}".to_string());
-
-        let args_value: serde_json::Value =
-            serde_json::from_str(&args_json).unwrap_or(serde_json::Value::Null);
+        let call_id = u64_arg(args, 0, ctx)?;
+        let (key, args_value) = parse_invoke_args(args, ctx)?;
 
         // Flavour policy (incl. stream-via-invoke rejection) lives in `plugin`;
         // here we only route the outcome to `state`.
@@ -287,18 +301,8 @@ pub(crate) fn register_invoke(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
 /// all state lives in `state`/`plugin` registries.
 pub(crate) fn register_stream(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let invoke_stream = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let stream_id: f64 = args.first().cloned().unwrap_or_default().try_js_into(ctx)?;
-        let stream_id = stream_id as u64;
-        let key: String = args.get(1).cloned().unwrap_or_default().try_js_into(ctx)?;
-        let args_json: String = args
-            .get(2)
-            .cloned()
-            .unwrap_or_default()
-            .try_js_into(ctx)
-            .unwrap_or_else(|_| "{}".to_string());
-
-        let args_value: serde_json::Value =
-            serde_json::from_str(&args_json).unwrap_or(serde_json::Value::Null);
+        let stream_id = u64_arg(args, 0, ctx)?;
+        let (key, args_value) = parse_invoke_args(args, ctx)?;
 
         // Flavour policy (non-stream commands → error) lives in `plugin`; here we
         // only route: spawn the stream, or terminate it with the dispatch error.
@@ -313,8 +317,8 @@ pub(crate) fn register_stream(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     });
 
     let stream_cancel = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let stream_id: f64 = args.first().cloned().unwrap_or_default().try_js_into(ctx)?;
-        state::cancel_stream(stream_id as u64);
+        let stream_id = u64_arg(args, 0, ctx)?;
+        state::cancel_stream(stream_id);
         Ok(JsValue::undefined())
     });
 
