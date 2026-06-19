@@ -139,7 +139,9 @@ pub(crate) fn clear_scrollbar_drag_for(target: ElementId) {
     });
 }
 
-/// Drop all drag state on dev-mode full reload (see [`crate::render::clear_node_views`]).
+/// Drop all drag state on dev-mode full reload. Registered as a reload hook in
+/// [`register_lifecycle`] and fired by [`crate::lifecycle::reload`] (driven by
+/// `state::reset_for_reload`), alongside every other registry's reload cleanup.
 #[cfg(debug_assertions)]
 pub(crate) fn clear_scrollbar_drag() {
     SCROLLBAR_DRAG.with(|m| m.borrow_mut().clear());

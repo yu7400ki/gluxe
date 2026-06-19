@@ -91,8 +91,9 @@ const handlers = new Map<number, Record<string, RegisteredHandler>>();
  * Called by Rust when a GPUI event fires. Routes to the registered JS handler.
  *
  * `payload` fields by event kind — mouse: `{x, y}`; keydown: `{key, shift, ctrl, alt, meta}`;
- * change/submit/focus/blur: `{value}`. Handlers receive `{ type, target, ...payload }`,
- * except `onChangeText` / `onSubmit` which receive the string directly (React Native convention).
+ * change/submit and TextInput focus/blur: `{value}`; View/Image focus/blur: `{}` (no fields).
+ * Handlers receive `{ type, target, ...payload }`, except `onChangeText` / `onSubmit` which
+ * receive the string directly (React Native convention).
  */
 hostGlobal.__dispatchEvent = (id, type, payload): void => {
   const handler = handlers.get(id)?.[type];
