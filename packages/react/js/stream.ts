@@ -40,9 +40,6 @@ streamGlobal.__streamPush = (streamId: number, json: string): void => {
   }
 };
 
-const __invokeStream = streamGlobal.__invokeStream;
-const __streamCancel = streamGlobal.__streamCancel;
-
 interface Waiter<T> {
   resolve: (result: IteratorResult<T>) => void;
   reject: (error: unknown) => void;
@@ -127,7 +124,7 @@ export class GluxeStream<T> {
     if (this.cancelled || this.done) return;
     this.cancelled = true;
     controllers.delete(this.streamId);
-    __streamCancel(this.streamId);
+    streamGlobal.__streamCancel(this.streamId);
     this._close();
   }
 
@@ -169,6 +166,6 @@ export function invokeStream<T = unknown>(
   const id = nextStreamId++;
   const stream = new GluxeStream<T>(id);
   controllers.set(id, stream as GluxeStream<unknown>);
-  __invokeStream(id, cmd, JSON.stringify(args));
+  streamGlobal.__invokeStream(id, cmd, JSON.stringify(args));
   return stream;
 }

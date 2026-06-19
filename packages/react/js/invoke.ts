@@ -18,7 +18,8 @@ interface InvokeGlobal {
 const invokeGlobal = globalThis as unknown as InvokeGlobal;
 
 let nextId = 1;
-const pending = new Map<
+// Test seam — exported for characterization tests only; not part of the public API.
+export const pending = new Map<
   number,
   { resolve: (value: unknown) => void; reject: (error: unknown) => void }
 >();
@@ -36,8 +37,6 @@ invokeGlobal.__resolveInvoke = (id: number, json: string): void => {
   }
 };
 
-const __invoke = invokeGlobal.__invoke;
-
 /**
  * Call a native command registered via the gluxe plugin system.
  *
@@ -48,6 +47,6 @@ export function invoke<T = unknown>(cmd: string, args: Record<string, unknown> =
   const id = nextId++;
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-    __invoke(id, cmd, JSON.stringify(args));
+    invokeGlobal.__invoke(id, cmd, JSON.stringify(args));
   });
 }

@@ -124,6 +124,9 @@ function extractHandlers(props: Props): {
   return { plain, events, map };
 }
 
+// Test seams — exported for characterization tests only; not part of the public API.
+export { EVENT_PROP_TO_TYPE, extractHandlers, handlers };
+
 const bridge = hostGlobal.__bridge;
 
 const hostConfig = {
