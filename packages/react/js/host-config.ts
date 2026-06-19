@@ -64,20 +64,54 @@ interface HostGlobal {
 
 const hostGlobal = globalThis as unknown as HostGlobal;
 
-/** Maps event prop names to bridge event type strings. */
-const EVENT_PROP_TO_TYPE: Record<string, string> = {
-  onClick: "click",
-  onMouseDown: "mousedown",
-  onMouseUp: "mouseup",
-  onMouseMove: "mousemove",
-  onMouseEnter: "mouseenter",
-  onMouseLeave: "mouseleave",
-  onKeyDown: "keydown",
-  onChangeText: "change",
-  onSubmit: "submit",
-  onFocus: "focus",
-  onBlur: "blur",
-};
+/** How a dispatched event reaches its JS handler: `"event"` delivers an event
+ *  object (`{ type, target, ...payload }`); `"text"` delivers the raw string
+ *  value (React Native convention, used by `onChangeText` / `onSubmit`). */
+type EventKind = "event" | "text";
+
+interface EventMapEntry {
+  /** Bridge wire-type string — sent to Rust and used as the handler-map key. */
+  type: string;
+  kind: EventKind;
+}
+
+/**
+ * Single source of truth for the handler-prop vocabulary. Drives prop extraction
+ * (`EVENT_PROP_TO_TYPE`), the wire types handed to Rust, and `__dispatchEvent`
+ * routing (`TEXT_EVENT_TYPES`).
+ *
+ * The Rust mirror is the `events!` table in `crates/core/src/model.rs` (mouse /
+ * keyboard / focus only — `change` / `submit` are TextInput-specific and never
+ * become Rust `Events` flags). The rich per-handler signatures live in the
+ * `EventProps` / `TextInputProps` interfaces in `primitives.ts`, which stay the
+ * authoritative type-level declarations.
+ */
+const EVENT_MAP = {
+  onClick: { type: "click", kind: "event" },
+  onMouseDown: { type: "mousedown", kind: "event" },
+  onMouseUp: { type: "mouseup", kind: "event" },
+  onMouseMove: { type: "mousemove", kind: "event" },
+  onMouseEnter: { type: "mouseenter", kind: "event" },
+  onMouseLeave: { type: "mouseleave", kind: "event" },
+  onKeyDown: { type: "keydown", kind: "event" },
+  onChangeText: { type: "change", kind: "text" },
+  onSubmit: { type: "submit", kind: "text" },
+  onFocus: { type: "focus", kind: "event" },
+  onBlur: { type: "blur", kind: "event" },
+} satisfies Record<string, EventMapEntry>;
+
+/** Event prop name → bridge wire-type string. Derived from {@link EVENT_MAP}. */
+const EVENT_PROP_TO_TYPE: Record<string, string> = Object.fromEntries(
+  Object.entries(EVENT_MAP).map(([prop, e]) => [prop, e.type]),
+);
+
+/** Wire types whose handlers receive the raw string value rather than an event
+ *  object. Derived from {@link EVENT_MAP}'s `"text"`-kind entries. */
+const TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(
+  Object.values(EVENT_MAP)
+    .filter((e) => e.kind === "text")
+    .map((e) => e.type),
+);
 
 // Key = ElementId. Populated in createInstance/commitUpdate; cleared in detachDeletedInstance.
 const handlers = new Map<number, Record<string, RegisteredHandler>>();
@@ -93,7 +127,7 @@ hostGlobal.__dispatchEvent = (id, type, payload): void => {
   const handler = handlers.get(id)?.[type];
   if (!handler) return;
 
-  if (type === "change" || type === "submit") {
+  if (TEXT_EVENT_TYPES.has(type)) {
     const value = payload.value;
     (handler as TextEventHandler)(typeof value === "string" ? value : "");
   } else {
@@ -125,7 +159,7 @@ function extractHandlers(props: Props): {
 }
 
 // Test seams — exported for characterization tests only; not part of the public API.
-export { EVENT_PROP_TO_TYPE, extractHandlers, handlers };
+export { EVENT_MAP, EVENT_PROP_TO_TYPE, extractHandlers, handlers };
 
 const bridge = hostGlobal.__bridge;
 

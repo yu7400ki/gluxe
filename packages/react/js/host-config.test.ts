@@ -31,7 +31,43 @@ const mockBridge = {
 (globalThis as Record<string, unknown>).__invoke = vi.fn();
 
 // Now import the module under test (after the globals are in place).
-import { EVENT_PROP_TO_TYPE, extractHandlers, handlers } from "./host-config";
+import { EVENT_MAP, EVENT_PROP_TO_TYPE, extractHandlers, handlers } from "./host-config";
+
+// ─── EVENT_MAP single source ─────────────────────────────────────────────────
+
+describe("EVENT_MAP", () => {
+  it("derives EVENT_PROP_TO_TYPE one-to-one (same keys, same wire types)", () => {
+    const fromMap = Object.fromEntries(Object.entries(EVENT_MAP).map(([k, e]) => [k, e.type]));
+    expect(EVENT_PROP_TO_TYPE).toEqual(fromMap);
+  });
+
+  it("marks exactly onChangeText/onSubmit as text-kind (raw-string delivery)", () => {
+    const textProps = Object.entries(EVENT_MAP)
+      .filter(([, e]) => e.kind === "text")
+      .map(([k]) => k);
+    expect(textProps.toSorted()).toEqual(["onChangeText", "onSubmit"]);
+  });
+
+  it("marks every other handler as event-kind (event-object delivery)", () => {
+    const eventProps = Object.entries(EVENT_MAP)
+      .filter(([, e]) => e.kind === "event")
+      .map(([, e]) => e.type)
+      .toSorted();
+    expect(eventProps).toEqual(
+      [
+        "click",
+        "mousedown",
+        "mouseup",
+        "mousemove",
+        "mouseenter",
+        "mouseleave",
+        "keydown",
+        "focus",
+        "blur",
+      ].toSorted(),
+    );
+  });
+});
 
 // ─── EVENT_PROP_TO_TYPE ─────────────────────────────────────────────────────
 
