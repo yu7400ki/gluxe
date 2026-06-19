@@ -384,6 +384,17 @@ macro_rules! build_div_with_pseudo {
                 let has_x = matches!($props.style.overflow_x, Some(OverflowMode::Scroll));
                 let has_y = matches!($props.style.overflow_y, Some(OverflowMode::Scroll));
                 stateful = stateful.on_key_down(move |e: &KeyDownEvent, window, cx| {
+                    // A keystroke dispatched at a focused descendant (a Button,
+                    // Select, TextInput, …) bubbles up to this container's
+                    // handler too, and GPUI has no `preventDefault` to let the
+                    // child suppress it. Scroll only when the CONTAINER ITSELF
+                    // holds focus, so e.g. Space on a button inside the scroll
+                    // area activates the button without also paging the viewport.
+                    // (`is_focused` is true only for this element, not descendants
+                    // — unlike `contains_focused`/`within_focused`.)
+                    if !focus_handle(eid, cx).is_focused(window) {
+                        return;
+                    }
                     let handle = scroll_handle(eid);
                     let cur = handle.offset();
                     let max = handle.max_offset();
@@ -398,9 +409,13 @@ macro_rules! build_div_with_pseudo {
                         (f32::from(vp.width), f32::from(vp.height)),
                     ) {
                         let new = point(px(nx), px(ny));
-                        // Consume the key only when it actually moved the viewport,
-                        // so a boundary press (or max_offset == 0) bubbles to an
-                        // ancestor scroller (nested scrolling, browser-like).
+                        // Consume the key only when it actually moved the viewport;
+                        // a boundary press (or max_offset == 0) is left unconsumed
+                        // so it still reaches other keydown handlers. Note focus is
+                        // single-element, so an ancestor scroll container does NOT
+                        // pick the key up and scroll — keyboard has no wheel/touch
+                        // style scroll-chaining (this element's own gate above
+                        // already required it to be the focused one).
                         if new != cur {
                             handle.set_offset(new);
                             window.refresh();
