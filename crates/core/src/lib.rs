@@ -28,6 +28,7 @@ mod macro_support;
 mod model;
 mod plugin;
 mod render;
+mod scroll;
 mod scrollbar;
 mod stack;
 mod state;

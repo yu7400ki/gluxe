@@ -5,7 +5,7 @@ use std::{
 
 use gpui::{
     AnyElement, App, Context as GpuiContext, Entity, IntoElement, KeyDownEvent, MouseButton,
-    Render, Subscription, Window, WindowControlArea, div, img, prelude::*,
+    Render, Subscription, Window, WindowControlArea, div, img, point, prelude::*, px,
 };
 use rustc_hash::FxHashMap;
 use url::Url;
@@ -370,6 +370,44 @@ macro_rules! build_div_with_pseudo {
             }
             if $props.style.scrolls() {
                 stateful = stateful.track_scroll(&scroll_handle(eid));
+            }
+            // Keyboard scrolling for a focusable overflow:scroll container (the
+            // ScrollArea Viewport): Arrow/Page/Home/End/Space move the viewport,
+            // browser-like. Reads & writes the SAME ScrollHandle the native
+            // scrollbar tracks, so the thumb follows for free.
+            //
+            // NOTE: if the consumer also sets `onKeyDown`, BOTH this core handler
+            // and the JS onKeyDown dispatch (attach_events!) run for the keystroke
+            // — GPUI has no `preventDefault` equivalent for one to suppress the
+            // other. Intentional tradeoff; revisit if it becomes a footgun.
+            if $props.style.scrolls() && $props.is_focusable() {
+                let has_x = matches!($props.style.overflow_x, Some(OverflowMode::Scroll));
+                let has_y = matches!($props.style.overflow_y, Some(OverflowMode::Scroll));
+                stateful = stateful.on_key_down(move |e: &KeyDownEvent, window, cx| {
+                    let handle = scroll_handle(eid);
+                    let cur = handle.offset();
+                    let max = handle.max_offset();
+                    let vp = handle.bounds().size;
+                    if let Some((nx, ny)) = crate::scroll::scroll_offset_for_key(
+                        e.keystroke.key.as_str(),
+                        e.keystroke.modifiers,
+                        has_x,
+                        has_y,
+                        (f32::from(cur.x), f32::from(cur.y)),
+                        (f32::from(max.x), f32::from(max.y)),
+                        (f32::from(vp.width), f32::from(vp.height)),
+                    ) {
+                        let new = point(px(nx), px(ny));
+                        // Consume the key only when it actually moved the viewport,
+                        // so a boundary press (or max_offset == 0) bubbles to an
+                        // ancestor scroller (nested scrolling, browser-like).
+                        if new != cur {
+                            handle.set_offset(new);
+                            window.refresh();
+                            cx.stop_propagation();
+                        }
+                    }
+                });
             }
             let stateful = attach_stateful_interactions!(stateful, eid, $props);
             stateful.children($children).into_any_element()
