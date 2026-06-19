@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "pnpm -F=./packages/* -F=./plugins/* build",
-    "typecheck": "pnpm -F=./packages/* -F=./plugins/* typecheck",
+    "build": "pnpm -F=@gluxe/* build",
+    "typecheck": "pnpm -F=@gluxe/* typecheck",
     "format": "oxfmt --write .",
     "lint": "pnpm -r lint"
   },
