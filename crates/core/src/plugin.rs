@@ -403,6 +403,88 @@ pub(crate) fn dispatch_command(key: &str, args: Value) -> Dispatched {
 }
 
 // ---------------------------------------------------------------------------
+// Flavour-aware dispatch adapters
+// ---------------------------------------------------------------------------
+//
+// `__invoke` (one result) and `__invokeStream` (many chunks) each accept only a
+// subset of the command flavours. These adapters classify the lookup and fold the
+// wrong-flavour cases into an error here, so the bridge layer only routes the
+// outcome to `state` and never owns the flavour policy or its wording.
+
+/// Why a command could not be served through the entry point it was called from.
+enum FlavourMismatch {
+    /// `invoke` targeted a stream command.
+    InvokeHitStream,
+    /// `invokeStream` targeted a sync command.
+    StreamHitSync,
+    /// `invokeStream` targeted an async command.
+    StreamHitAsync,
+}
+
+/// The JS-facing error string for a flavour mismatch — the single source for the
+/// wording, shared by both dispatch adapters (and their tests).
+fn format_flavour_mismatch(key: &str, mismatch: FlavourMismatch) -> String {
+    match mismatch {
+        FlavourMismatch::InvokeHitStream => {
+            format!("'{key}' is a stream command — use invokeStream")
+        }
+        FlavourMismatch::StreamHitSync => format!("'{key}' is not a stream command"),
+        FlavourMismatch::StreamHitAsync => format!("'{key}' is an async (non-stream) command"),
+    }
+}
+
+/// Outcome of an `invoke` (single-result) dispatch. A stream command is folded
+/// into `Ready(Err(..))`, so the bridge only routes — it owns no flavour policy.
+pub(crate) enum InvokeOutcome {
+    /// Already settled — a sync result, an unknown-key error, or a flavour mismatch.
+    Ready(CommandResult),
+    /// Run `handler(args)` on a background thread; the Promise resolves later.
+    Spawn(AsyncCommandHandler, Value),
+}
+
+/// Dispatch a command invoked via `__invoke`. Sync runs inline, async defers, and
+/// a stream command is a flavour mismatch (the caller must use `invokeStream`).
+pub(crate) fn dispatch_invoke(key: &str, args: Value) -> InvokeOutcome {
+    match dispatch_command(key, args) {
+        Dispatched::Ready(result) => InvokeOutcome::Ready(result),
+        Dispatched::Spawn(handler, args) => InvokeOutcome::Spawn(handler, args),
+        Dispatched::SpawnStream(_, _) => InvokeOutcome::Ready(Err(format_flavour_mismatch(
+            key,
+            FlavourMismatch::InvokeHitStream,
+        ))),
+    }
+}
+
+/// Outcome of an `invokeStream` dispatch. Non-stream commands and unknown keys are
+/// folded into `Error(..)`, so the bridge only routes — it owns no flavour policy.
+pub(crate) enum StreamOutcome {
+    /// Run `handler(args, sink)` on a background thread.
+    Spawn(StreamCommandHandler, Value),
+    /// Terminate the stream immediately with this error (unknown key or mismatch).
+    Error(String),
+}
+
+/// Dispatch a command invoked via `__invokeStream`. Only stream commands proceed;
+/// sync/async/unknown keys terminate the stream with an error (it never hangs).
+///
+/// A sync command's handler still runs (inside [`dispatch_command`]) and its
+/// result is discarded — preserving the prior bridge behavior exactly.
+pub(crate) fn dispatch_stream(key: &str, args: Value) -> StreamOutcome {
+    match dispatch_command(key, args) {
+        Dispatched::SpawnStream(handler, args) => StreamOutcome::Spawn(handler, args),
+        // Unknown key — propagate dispatch's own message.
+        Dispatched::Ready(Err(msg)) => StreamOutcome::Error(msg),
+        Dispatched::Ready(Ok(_)) => {
+            StreamOutcome::Error(format_flavour_mismatch(key, FlavourMismatch::StreamHitSync))
+        }
+        Dispatched::Spawn(_, _) => StreamOutcome::Error(format_flavour_mismatch(
+            key,
+            FlavourMismatch::StreamHitAsync,
+        )),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
@@ -439,6 +521,57 @@ mod tests {
             _ => panic!("expected Ready(Err(..))"),
         }
         assert!(take_window_commands().is_empty());
+    }
+
+    #[test]
+    fn dispatch_invoke_rejects_stream_command_as_flavour_mismatch() {
+        register_plugins(vec![
+            PluginBuilder::new("s")
+                .stream_command("tick", |_args, mut sink| sink.end())
+                .async_command("once", |_args| Ok(Value::Null))
+                .command("now", |_args| Ok(Value::from(1)))
+                .build(),
+        ]);
+        // Sync → Ready; async → Spawn; stream → folded into Ready(Err) here.
+        assert!(matches!(
+            dispatch_invoke("s|now", Value::Null),
+            InvokeOutcome::Ready(Ok(_))
+        ));
+        assert!(matches!(
+            dispatch_invoke("s|once", Value::Null),
+            InvokeOutcome::Spawn(_, _)
+        ));
+        match dispatch_invoke("s|tick", Value::Null) {
+            InvokeOutcome::Ready(Err(msg)) => assert!(msg.contains("use invokeStream")),
+            _ => panic!("a stream command via invoke must be a flavour-mismatch error"),
+        }
+    }
+
+    #[test]
+    fn dispatch_stream_folds_non_stream_and_unknown_into_error() {
+        register_plugins(vec![
+            PluginBuilder::new("s")
+                .stream_command("tick", |_args, mut sink| sink.end())
+                .async_command("once", |_args| Ok(Value::Null))
+                .command("now", |_args| Ok(Value::Null))
+                .build(),
+        ]);
+        assert!(matches!(
+            dispatch_stream("s|tick", Value::Null),
+            StreamOutcome::Spawn(_, _)
+        ));
+        match dispatch_stream("s|now", Value::Null) {
+            StreamOutcome::Error(msg) => assert!(msg.contains("not a stream command")),
+            _ => panic!("a sync command via invokeStream must error"),
+        }
+        match dispatch_stream("s|once", Value::Null) {
+            StreamOutcome::Error(msg) => assert!(msg.contains("async (non-stream)")),
+            _ => panic!("an async command via invokeStream must error"),
+        }
+        match dispatch_stream("s|missing", Value::Null) {
+            StreamOutcome::Error(msg) => assert!(msg.contains("unknown command")),
+            _ => panic!("an unknown key via invokeStream must error"),
+        }
     }
 
     #[test]

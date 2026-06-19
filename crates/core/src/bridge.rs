@@ -317,17 +317,13 @@ pub(crate) fn register_invoke(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
         let args_value: serde_json::Value =
             serde_json::from_str(&args_json).unwrap_or(serde_json::Value::Null);
 
-        match plugin::dispatch_command(&key, args_value) {
-            plugin::Dispatched::Ready(result) => state::enqueue_invoke_result(call_id, result),
-            plugin::Dispatched::Spawn(handler, args) => {
+        // Flavour policy (incl. stream-via-invoke rejection) lives in `plugin`;
+        // here we only route the outcome to `state`.
+        match plugin::dispatch_invoke(&key, args_value) {
+            plugin::InvokeOutcome::Ready(result) => state::enqueue_invoke_result(call_id, result),
+            plugin::InvokeOutcome::Spawn(handler, args) => {
                 state::spawn_async_command(call_id, handler, args)
             }
-            // A streaming command can't deliver a single result — reject the
-            // `invoke` Promise; the caller must use `invokeStream` instead.
-            plugin::Dispatched::SpawnStream(_, _) => state::enqueue_invoke_result(
-                call_id,
-                Err(format!("'{key}' is a stream command — use invokeStream")),
-            ),
         }
 
         Ok(JsValue::undefined())
@@ -369,20 +365,13 @@ pub(crate) fn register_stream(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
         let args_value: serde_json::Value =
             serde_json::from_str(&args_json).unwrap_or(serde_json::Value::Null);
 
-        match plugin::dispatch_command(&key, args_value) {
-            plugin::Dispatched::SpawnStream(handler, args) => {
+        // Flavour policy (non-stream commands → error) lives in `plugin`; here we
+        // only route: spawn the stream, or terminate it with the dispatch error.
+        match plugin::dispatch_stream(&key, args_value) {
+            plugin::StreamOutcome::Spawn(handler, args) => {
                 state::spawn_stream_command(stream_id, handler, args)
             }
-            // Unknown key — propagate dispatch's own message.
-            plugin::Dispatched::Ready(Err(msg)) => state::error_stream(stream_id, msg),
-            // Wrong flavour: sync/async command invoked as a stream.
-            plugin::Dispatched::Ready(Ok(_)) => {
-                state::error_stream(stream_id, format!("'{key}' is not a stream command"))
-            }
-            plugin::Dispatched::Spawn(_, _) => state::error_stream(
-                stream_id,
-                format!("'{key}' is an async (non-stream) command"),
-            ),
+            plugin::StreamOutcome::Error(msg) => state::error_stream(stream_id, msg),
         }
 
         Ok(JsValue::undefined())
