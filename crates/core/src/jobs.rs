@@ -57,10 +57,22 @@ pub(crate) struct GpuiJobExecutor {
 
 impl GpuiJobExecutor {
     fn clear(&self) {
-        self.promise_jobs.borrow_mut().clear();
-        self.async_jobs.borrow_mut().clear();
-        self.clock_jobs.borrow_mut().clear();
-        self.generic_jobs.borrow_mut().clear();
+        // Destructure without `..` so adding a queue field becomes a compile
+        // error here until it is cleared too. The previous version forgot
+        // `finalization_registry_jobs`, an omission that was invisible at
+        // runtime (it only leaks on dev-mode hot reload).
+        let Self {
+            promise_jobs,
+            async_jobs,
+            finalization_registry_jobs,
+            clock_jobs,
+            generic_jobs,
+        } = self;
+        promise_jobs.borrow_mut().clear();
+        async_jobs.borrow_mut().clear();
+        finalization_registry_jobs.borrow_mut().clear();
+        clock_jobs.borrow_mut().clear();
+        generic_jobs.borrow_mut().clear();
     }
 
     /// The earliest parked clock-job deadline, if any. Used by the runtime to arm
