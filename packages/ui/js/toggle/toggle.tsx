@@ -3,8 +3,8 @@ import React from "react";
 
 import { Button } from "../button/button";
 import { composeEventHandlers } from "../internal/compose";
-import { useControllableState } from "../internal/controllable-state";
 import { renderSlot, type Slot } from "../internal/slot";
+import { negate, useToggleRoot } from "../internal/toggle-root";
 
 /** State the Toggle exposes to its render-function children. */
 export interface ToggleState {
@@ -61,17 +61,19 @@ export function Toggle({
   onClick,
   ...viewProps
 }: ToggleProps): React.ReactElement {
-  const [pressed = false, setPressed] = useControllableState({
+  const [pressed, toggle] = useToggleRoot({
     prop: pressedProp,
     defaultProp: defaultPressed,
     onChange: onPressedChange,
+    defaultValue: false,
+    next: negate,
   });
 
   return (
     <Button
       {...viewProps}
       disabled={disabled}
-      onClick={composeEventHandlers<GpuiMouseEvent>(onClick, () => setPressed(!pressed))}
+      onClick={composeEventHandlers<GpuiMouseEvent>(onClick, toggle)}
     >
       {renderSlot(children, { pressed, disabled })}
     </Button>

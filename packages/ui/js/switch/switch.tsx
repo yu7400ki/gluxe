@@ -1,11 +1,11 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 
 import { Button } from "../button/button";
 import { composeEventHandlers } from "../internal/compose";
 import { createSafeContext } from "../internal/context";
-import { useControllableState } from "../internal/controllable-state";
 import { renderSlot, type Slot } from "../internal/slot";
+import { negate, useToggleRoot } from "../internal/toggle-root";
 
 /** State a Switch part exposes to its render-function children. */
 export interface SwitchState {
@@ -52,14 +52,14 @@ export function Switch({
   onClick,
   ...viewProps
 }: SwitchProps): React.ReactElement {
-  const [checked = false, setChecked] = useControllableState({
+  // No disabled guard: <Button> suppresses onClick while disabled.
+  const [checked, toggle] = useToggleRoot({
     prop: checkedProp,
     defaultProp: defaultChecked,
     onChange: onCheckedChange,
+    defaultValue: false,
+    next: negate,
   });
-
-  // No disabled guard: <Button> suppresses onClick while disabled.
-  const toggle = useCallback(() => setChecked(!checked), [checked, setChecked]);
 
   const context = useMemo<SwitchContextValue>(
     () => ({ checked, disabled, toggle }),

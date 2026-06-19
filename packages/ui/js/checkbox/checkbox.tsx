@@ -1,14 +1,19 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 
 import { Button } from "../button/button";
 import { composeEventHandlers } from "../internal/compose";
 import { createSafeContext } from "../internal/context";
-import { useControllableState } from "../internal/controllable-state";
 import { renderSlot, type Slot } from "../internal/slot";
+import { useToggleRoot } from "../internal/toggle-root";
 
 /** The three possible checked states of a {@link Checkbox}. */
 export type CheckedState = boolean | "indeterminate";
+
+// A click advances the tri-state to a plain boolean: indeterminate counts as
+// unchecked, so it moves to `true`. Module-scope (stable) so `toggle` stays
+// stable. The narrower boolean is exactly what onCheckedChange receives.
+const nextChecked = (current: CheckedState): boolean => current !== true;
 
 /** State a Checkbox part exposes to its render-function children. */
 export interface CheckboxState {
@@ -72,17 +77,14 @@ export function Checkbox({
   onClick,
   ...viewProps
 }: CheckboxProps): React.ReactElement {
-  // Stores a tri-state value but only ever toggles to a boolean, so the setter
-  // (and onCheckedChange) take the narrower boolean directly. Indeterminate
-  // counts as unchecked, so a click moves it to `true`.
-  const [checkedState = false, setChecked] = useControllableState<CheckedState, boolean>({
+  // No disabled guard: <Button> suppresses onClick while disabled.
+  const [checkedState, toggle] = useToggleRoot<CheckedState, boolean>({
     prop: checkedProp,
     defaultProp: defaultChecked,
     onChange: onCheckedChange,
+    defaultValue: false,
+    next: nextChecked,
   });
-
-  // No disabled guard: <Button> suppresses onClick while disabled.
-  const toggle = useCallback(() => setChecked(checkedState !== true), [checkedState, setChecked]);
 
   const context = useMemo<CheckboxContextValue>(
     () => ({ checked: checkedState, disabled, toggle }),

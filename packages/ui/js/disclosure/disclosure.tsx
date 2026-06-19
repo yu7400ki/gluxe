@@ -1,11 +1,11 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 
 import { Button } from "../button/button";
 import { composeEventHandlers } from "../internal/compose";
 import { createSafeContext } from "../internal/context";
-import { useControllableState } from "../internal/controllable-state";
 import { renderSlot, type Slot } from "../internal/slot";
+import { negate, useToggleRoot } from "../internal/toggle-root";
 
 /** State a Disclosure part exposes to its render-function children. */
 export interface DisclosureState {
@@ -47,14 +47,14 @@ export function Disclosure({
   children,
   ...viewProps
 }: DisclosureProps): React.ReactElement {
-  const [open = false, setOpen] = useControllableState({
+  // No disabled guard: the trigger's <Button> suppresses onClick while disabled.
+  const [open, toggle] = useToggleRoot({
     prop: openProp,
     defaultProp: defaultOpen,
     onChange: onOpenChange,
+    defaultValue: false,
+    next: negate,
   });
-
-  // No disabled guard: the trigger's <Button> suppresses onClick while disabled.
-  const toggle = useCallback(() => setOpen(!open), [open, setOpen]);
 
   const context = useMemo<DisclosureContextValue>(
     () => ({ open, disabled, toggle }),
