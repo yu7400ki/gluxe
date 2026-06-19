@@ -65,108 +65,126 @@ fn color_of(value: &JsValue) -> Option<Rgba> {
     str_of(value).and_then(|s| parse_color(&s))
 }
 
-/// Assign a single non-composite style field from an already-fetched JS `value`.
-/// Only assigns when conversion yields `Some`, so an unparseable high-priority value
-/// does not clobber a valid low-priority one.
-fn apply_simple_field(fields: &mut StyleFields, key: &str, value: &JsValue) {
-    macro_rules! set {
-        ($field:ident, $val:expr) => {
-            if let Some(v) = $val {
-                fields.$field = Some(v);
+/// Table of simple (1:1 key → field) style props: `(rust_field, "jsName", Kind)`.
+/// Generates [`apply_simple_field`]. `Kind` picks the JS→Rust converter, whose
+/// return type must match the `StyleFields` field type — a `Kind`/field mismatch
+/// is a compile error, so the table can never silently mis-convert a prop. (The
+/// animatable subset is declared separately in `anim/fields.rs`; merging the two
+/// tables behind a shared `animatable` flag is a possible future consolidation.)
+macro_rules! simple_style_fields {
+    (@convert Length, $value:expr) => { length_from_value($value) };
+    (@convert F32, $value:expr) => { f32_of($value) };
+    (@convert Str, $value:expr) => { str_of($value) };
+    (@convert Color, $value:expr) => { color_of($value) };
+    // Grid track counts: number → u16, min 1.
+    (@convert GridTrack, $value:expr) => { f32_of($value).map(|n| (n as u16).max(1)) };
+    ($(($field:ident, $name:literal, $kind:ident)),* $(,)?) => {
+        /// Assign a single non-composite style field from an already-fetched JS `value`.
+        /// Only assigns when conversion yields `Some`, so an unparseable high-priority value
+        /// does not clobber a valid low-priority one. Generated from the field table below.
+        fn apply_simple_field(fields: &mut StyleFields, key: &str, value: &JsValue) {
+            match key {
+                $(
+                    $name => {
+                        if let Some(v) = simple_style_fields!(@convert $kind, value) {
+                            fields.$field = Some(v);
+                        }
+                    }
+                )*
+                // Unknown / non-style / composite keys: ignored here.
+                _ => {}
             }
-        };
-    }
-    match key {
-        // ---- Lengths ----
-        "width" => set!(width, length_from_value(value)),
-        "height" => set!(height, length_from_value(value)),
-        "flexBasis" => set!(flex_basis, length_from_value(value)),
-        "padding" => set!(padding, length_from_value(value)),
-        "paddingX" => set!(padding_x, length_from_value(value)),
-        "paddingY" => set!(padding_y, length_from_value(value)),
-        "paddingTop" => set!(padding_top, length_from_value(value)),
-        "paddingRight" => set!(padding_right, length_from_value(value)),
-        "paddingBottom" => set!(padding_bottom, length_from_value(value)),
-        "paddingLeft" => set!(padding_left, length_from_value(value)),
-        "gap" => set!(gap, length_from_value(value)),
-        "gapX" => set!(gap_x, length_from_value(value)),
-        "gapY" => set!(gap_y, length_from_value(value)),
-        "borderRadius" => set!(border_radius, length_from_value(value)),
-        "borderWidth" => set!(border_width, length_from_value(value)),
-        "fontSize" => set!(font_size, length_from_value(value)),
-        "margin" => set!(margin, length_from_value(value)),
-        "marginX" => set!(margin_x, length_from_value(value)),
-        "marginY" => set!(margin_y, length_from_value(value)),
-        "marginTop" => set!(margin_top, length_from_value(value)),
-        "marginRight" => set!(margin_right, length_from_value(value)),
-        "marginBottom" => set!(margin_bottom, length_from_value(value)),
-        "marginLeft" => set!(margin_left, length_from_value(value)),
-        "minWidth" => set!(min_width, length_from_value(value)),
-        "minHeight" => set!(min_height, length_from_value(value)),
-        "maxWidth" => set!(max_width, length_from_value(value)),
-        "maxHeight" => set!(max_height, length_from_value(value)),
-        "inset" => set!(inset, length_from_value(value)),
-        "top" => set!(top, length_from_value(value)),
-        "right" => set!(right, length_from_value(value)),
-        "bottom" => set!(bottom, length_from_value(value)),
-        "left" => set!(left, length_from_value(value)),
-        "borderTopWidth" => set!(border_top_width, length_from_value(value)),
-        "borderRightWidth" => set!(border_right_width, length_from_value(value)),
-        "borderBottomWidth" => set!(border_bottom_width, length_from_value(value)),
-        "borderLeftWidth" => set!(border_left_width, length_from_value(value)),
-        "borderTopLeftRadius" => set!(border_top_left_radius, length_from_value(value)),
-        "borderTopRightRadius" => set!(border_top_right_radius, length_from_value(value)),
-        "borderBottomRightRadius" => set!(border_bottom_right_radius, length_from_value(value)),
-        "borderBottomLeftRadius" => set!(border_bottom_left_radius, length_from_value(value)),
-        "scrollbarWidth" => set!(scrollbar_width, length_from_value(value)),
-        "textDecorationThickness" => set!(text_decoration_thickness, length_from_value(value)),
-        "caretWidth" => set!(caret_width, length_from_value(value)),
-        // ---- Numbers ----
-        "flexGrow" => set!(flex_grow, f32_of(value)),
-        "flexShrink" => set!(flex_shrink, f32_of(value)),
-        "lineClamp" => set!(line_clamp, f32_of(value)),
-        "aspectRatio" => set!(aspect_ratio, f32_of(value)),
-        "opacity" => set!(opacity, f32_of(value)),
-        // ---- Grid track counts (number → u16, min 1) ----
-        "gridTemplateColumns" => {
-            set!(
-                grid_template_columns,
-                f32_of(value).map(|n| (n as u16).max(1))
-            )
         }
-        "gridTemplateRows" => set!(grid_template_rows, f32_of(value).map(|n| (n as u16).max(1))),
-        // ---- Strings ----
-        "display" => set!(display, str_of(value)),
-        "flexDirection" => set!(flex_direction, str_of(value)),
-        "alignItems" => set!(align_items, str_of(value)),
-        "justifyContent" => set!(justify_content, str_of(value)),
-        "flexWrap" => set!(flex_wrap, str_of(value)),
-        "alignSelf" => set!(align_self, str_of(value)),
-        "alignContent" => set!(align_content, str_of(value)),
-        "cursor" => set!(cursor, str_of(value)),
-        "whiteSpace" => set!(white_space, str_of(value)),
-        "textOverflow" => set!(text_overflow, str_of(value)),
-        "position" => set!(position, str_of(value)),
-        "visibility" => set!(visibility, str_of(value)),
-        "borderStyle" => set!(border_style, str_of(value)),
-        "textAlign" => set!(text_align, str_of(value)),
-        "fontStyle" => set!(font_style, str_of(value)),
-        "fontFamily" => set!(font_family, str_of(value)),
-        "textDecorationLine" => set!(text_decoration_line, str_of(value)),
-        "textDecorationStyle" => set!(text_decoration_style, str_of(value)),
-        // ---- Colors ----
-        "backgroundColor" => set!(background_color, color_of(value)),
-        "color" => set!(color, color_of(value)),
-        "borderColor" => set!(border_color, color_of(value)),
-        "textDecorationColor" => set!(text_decoration_color, color_of(value)),
-        "textBackgroundColor" => set!(text_background_color, color_of(value)),
-        "caretColor" => set!(caret_color, color_of(value)),
-        "selectionColor" => set!(selection_color, color_of(value)),
-        "placeholderColor" => set!(placeholder_color, color_of(value)),
-        // Unknown / non-style / composite keys: ignored here.
-        _ => {}
-    }
+    };
 }
+
+simple_style_fields![
+    // ---- Lengths ----
+    (width, "width", Length),
+    (height, "height", Length),
+    (flex_basis, "flexBasis", Length),
+    (padding, "padding", Length),
+    (padding_x, "paddingX", Length),
+    (padding_y, "paddingY", Length),
+    (padding_top, "paddingTop", Length),
+    (padding_right, "paddingRight", Length),
+    (padding_bottom, "paddingBottom", Length),
+    (padding_left, "paddingLeft", Length),
+    (gap, "gap", Length),
+    (gap_x, "gapX", Length),
+    (gap_y, "gapY", Length),
+    (border_radius, "borderRadius", Length),
+    (border_width, "borderWidth", Length),
+    (font_size, "fontSize", Length),
+    (margin, "margin", Length),
+    (margin_x, "marginX", Length),
+    (margin_y, "marginY", Length),
+    (margin_top, "marginTop", Length),
+    (margin_right, "marginRight", Length),
+    (margin_bottom, "marginBottom", Length),
+    (margin_left, "marginLeft", Length),
+    (min_width, "minWidth", Length),
+    (min_height, "minHeight", Length),
+    (max_width, "maxWidth", Length),
+    (max_height, "maxHeight", Length),
+    (inset, "inset", Length),
+    (top, "top", Length),
+    (right, "right", Length),
+    (bottom, "bottom", Length),
+    (left, "left", Length),
+    (border_top_width, "borderTopWidth", Length),
+    (border_right_width, "borderRightWidth", Length),
+    (border_bottom_width, "borderBottomWidth", Length),
+    (border_left_width, "borderLeftWidth", Length),
+    (border_top_left_radius, "borderTopLeftRadius", Length),
+    (border_top_right_radius, "borderTopRightRadius", Length),
+    (
+        border_bottom_right_radius,
+        "borderBottomRightRadius",
+        Length
+    ),
+    (border_bottom_left_radius, "borderBottomLeftRadius", Length),
+    (scrollbar_width, "scrollbarWidth", Length),
+    (text_decoration_thickness, "textDecorationThickness", Length),
+    (caret_width, "caretWidth", Length),
+    // ---- Numbers ----
+    (flex_grow, "flexGrow", F32),
+    (flex_shrink, "flexShrink", F32),
+    (line_clamp, "lineClamp", F32),
+    (aspect_ratio, "aspectRatio", F32),
+    (opacity, "opacity", F32),
+    // ---- Grid track counts (number → u16, min 1) ----
+    (grid_template_columns, "gridTemplateColumns", GridTrack),
+    (grid_template_rows, "gridTemplateRows", GridTrack),
+    // ---- Strings ----
+    (display, "display", Str),
+    (flex_direction, "flexDirection", Str),
+    (align_items, "alignItems", Str),
+    (justify_content, "justifyContent", Str),
+    (flex_wrap, "flexWrap", Str),
+    (align_self, "alignSelf", Str),
+    (align_content, "alignContent", Str),
+    (cursor, "cursor", Str),
+    (white_space, "whiteSpace", Str),
+    (text_overflow, "textOverflow", Str),
+    (position, "position", Str),
+    (visibility, "visibility", Str),
+    (border_style, "borderStyle", Str),
+    (text_align, "textAlign", Str),
+    (font_style, "fontStyle", Str),
+    (font_family, "fontFamily", Str),
+    (text_decoration_line, "textDecorationLine", Str),
+    (text_decoration_style, "textDecorationStyle", Str),
+    // ---- Colors ----
+    (background_color, "backgroundColor", Color),
+    (color, "color", Color),
+    (border_color, "borderColor", Color),
+    (text_decoration_color, "textDecorationColor", Color),
+    (text_background_color, "textBackgroundColor", Color),
+    (caret_color, "caretColor", Color),
+    (selection_color, "selectionColor", Color),
+    (placeholder_color, "placeholderColor", Color),
+];
 
 /// Walk one source object's own string keys, applying simple fields and recording
 /// composite-field presence. Array-index and symbol keys are skipped.
@@ -542,6 +560,29 @@ mod tests {
         assert_eq!(p.style.display.as_deref(), Some("flex"));
         assert!(p.style.background_color.is_some());
         assert_eq!(p.style.flex, Some(1.0));
+    }
+
+    #[test]
+    fn simple_field_kinds_convert_correctly() {
+        // One representative per `simple_style_fields!` Kind. The converter return
+        // type already pins the field type at compile time; this guards the value
+        // shape (and the GridTrack `(n as u16).max(1)` quirk) against a table edit.
+        let p = props_from_js(
+            "({ style: { width: '2rem', opacity: 0.5, color: '#00ff00', display: 'flex', gridTemplateColumns: 3 } })",
+        );
+        assert_eq!(p.style.width, Some(LengthValue::Rem(2.0))); // Length
+        assert_eq!(p.style.opacity, Some(0.5)); // F32
+        assert!(p.style.color.is_some()); // Color
+        assert_eq!(p.style.display.as_deref(), Some("flex")); // Str
+        assert_eq!(p.style.grid_template_columns, Some(3)); // GridTrack
+    }
+
+    #[test]
+    fn grid_track_count_clamps_to_min_one() {
+        // GridTrack converter floors at 1 even when JS passes 0/negative.
+        let p = props_from_js("({ style: { gridTemplateColumns: 0, gridTemplateRows: -4 } })");
+        assert_eq!(p.style.grid_template_columns, Some(1));
+        assert_eq!(p.style.grid_template_rows, Some(1));
     }
 
     #[test]
