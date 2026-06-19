@@ -17,3 +17,16 @@ export const theme = {
   track: "#2a2f3a",
   danger: "#ff6b6b",
 } as const;
+
+// A keyboard focus ring shared across the showcase. @gluxe/ui parts are the
+// focusable nodes, so this is passed to the part component itself (not an inner
+// render-prop View). `_focusVisible` shows it only during keyboard use (Tab /
+// arrow keys), staying out of the way for mouse clicks. `borderRadius` is set
+// per-component to match the part's shape so the ring hugs it cleanly.
+export function focusRing(borderRadius: number): {
+  _focusVisible: { borderWidth: number; borderColor: string; borderRadius: number };
+} {
+  return {
+    _focusVisible: { borderWidth: 2, borderColor: theme.accent, borderRadius },
+  };
+}

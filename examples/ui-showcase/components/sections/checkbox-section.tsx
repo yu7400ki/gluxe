@@ -10,7 +10,7 @@ import { Text, View } from "@gluxe/react";
 import { Checkbox, type CheckedState } from "@gluxe/ui";
 import React, { useState } from "react";
 
-import { theme } from "../theme";
+import { focusRing, theme } from "../theme";
 import { Label, Row, Section } from "../ui-kit";
 
 function CheckRow({
@@ -24,7 +24,8 @@ function CheckRow({
 }): React.ReactElement {
   return (
     <Row>
-      <Checkbox checked={checked} onCheckedChange={onChange}>
+      {/* Checkbox is the focusable node — ring goes here, matching the box radius. */}
+      <Checkbox checked={checked} onCheckedChange={onChange} style={focusRing(8)}>
         {({ checked: cs }) => (
           <View
             style={{
@@ -80,7 +81,7 @@ export function CheckboxSection(): React.ReactElement {
   return (
     <Section
       title="Checkbox"
-      description="A tri-state checkbox control. The parent shows an indeterminate (–) state when only some children are selected. Clicking it selects all; clicking again clears all."
+      description="A tri-state checkbox control. The parent shows an indeterminate (–) state when only some children are selected. Click or press Space / Enter (after tabbing to it) to select all; do it again to clear all."
     >
       <CheckRow checked={parentChecked} onChange={handleSelectAll} label="Select all toppings" />
       <View style={{ display: "flex", flexDirection: "column", gap: 10, marginLeft: 28 }}>

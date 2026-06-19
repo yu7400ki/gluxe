@@ -7,6 +7,10 @@
 
 export type { Slot } from "./internal/slot";
 
+// ---- Button ----
+export { Button } from "./button";
+export type { ButtonProps } from "./button";
+
 // ---- Toggle ----
 export { Toggle } from "./toggle";
 export type { ToggleProps, ToggleState } from "./toggle";
@@ -58,6 +62,7 @@ export type {
 // ---- Tabs ----
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export type {
+  TabsActivationMode,
   TabsContentProps,
   TabsListProps,
   TabsOrientation,

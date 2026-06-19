@@ -9,6 +9,7 @@ import { Text, View } from "@gluxe/react";
 import type React from "react";
 
 import { AccordionSection } from "./components/sections/accordion-section";
+import { ButtonSection } from "./components/sections/button-section";
 import { CheckboxSection } from "./components/sections/checkbox-section";
 import { DisclosureSection } from "./components/sections/disclosure-section";
 import { RadioGroupSection } from "./components/sections/radio-group-section";
@@ -45,10 +46,13 @@ export default function App(): React.ReactElement {
           <Text style={{ color: theme.text, fontSize: 26, fontWeight: "bold" }}>Gluxe UI</Text>
           <Text style={{ color: theme.textMuted, fontSize: 14, lineHeight: 1.5 }}>
             A gallery of headless @gluxe/ui components. The library provides behaviour and state
-            only — every style on this page is applied by the example.
+            only — every style on this page is applied by the example. Every control is
+            keyboard-navigable: Tab to move between them, the arrow keys to move within a RadioGroup
+            or the tab list, and Space or Enter to activate.
           </Text>
         </View>
 
+        <ButtonSection />
         <ToggleSection />
         <CheckboxSection />
         <SwitchSection />

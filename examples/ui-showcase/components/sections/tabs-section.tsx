@@ -2,7 +2,7 @@ import { Text, View } from "@gluxe/react";
 import { Tabs } from "@gluxe/ui";
 import React from "react";
 
-import { theme } from "../theme";
+import { focusRing, theme } from "../theme";
 import { Section } from "../ui-kit";
 
 const TABS = [
@@ -30,7 +30,7 @@ export function TabsSection(): React.ReactElement {
   return (
     <Section
       title="Tabs"
-      description="A headless tab panel. Selection is triggered on click; keyboard arrow-key navigation is not available in this framework."
+      description="A headless tab panel. The tab list is one Tab stop; once focused, the Left / Right arrow keys move between tabs (Home / End jump to the ends) and selection follows focus automatically. A click also selects directly."
     >
       <Tabs defaultValue="account">
         <Tabs.List
@@ -45,7 +45,11 @@ export function TabsSection(): React.ReactElement {
           }}
         >
           {TABS.map((tab) => (
-            <Tabs.Trigger key={tab.value} value={tab.value}>
+            // Tabs.Trigger is the focusable node — roving focus moves between
+            // triggers with the arrow keys, so the ring goes here. Don't pass
+            // tabIndex: roving focus owns the Tab order. Ring radius matches the
+            // trigger's 8px corners.
+            <Tabs.Trigger key={tab.value} value={tab.value} style={focusRing(8)}>
               {({ selected }) => (
                 <View
                   style={{

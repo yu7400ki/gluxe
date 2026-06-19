@@ -1,18 +1,25 @@
-import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
-import React, { useMemo } from "react";
+import { type GpuiKeyboardEvent, type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
+import React, { useCallback, useMemo } from "react";
 
 import { composeEventHandlers } from "./internal/compose";
 import { createSafeContext } from "./internal/context";
 import { useControllableState } from "./internal/controllable-state";
+import { mergeRefs } from "./internal/merge-refs";
+import { type RovingFocus, useRovingFocus, useRovingItem } from "./internal/roving-focus";
 import { renderSlot, type Slot } from "./internal/slot";
 
 /** Orientation of the tab list, exposed via context for consumer styling. */
 export type TabsOrientation = "horizontal" | "vertical";
 
+/** Whether arrow-key focus also selects the tab (`"automatic"`) or only moves
+ *  focus, deferring selection to Space / Enter (`"manual"`). */
+export type TabsActivationMode = "automatic" | "manual";
+
 interface TabsContextValue {
   value: string | undefined;
   setValue: (value: string) => void;
   orientation: TabsOrientation;
+  roving: RovingFocus;
 }
 
 const [TabsContextProvider, useTabsContext] = createSafeContext<TabsContextValue>("Tabs");
@@ -25,17 +32,22 @@ export interface TabsProps extends Omit<ViewProps, "children"> {
   /** Called with the newly selected tab value when it changes. */
   onValueChange?: (value: string) => void;
   /**
-   * Layout direction of the tab list.
-   *
-   * **Note:** GPUI has no programmatic focus API, so arrow-key roving-focus
-   * navigation between triggers is not possible in this framework. Selection
-   * occurs on click only. `orientation` is accepted and forwarded via context
-   * so consumers can style the list direction themselves, but the library does
-   * not implement keyboard navigation.
+   * Layout direction of the tab list. Also picks which arrows navigate:
+   * Left/Right for `"horizontal"`, Up/Down for `"vertical"`.
    *
    * @default "horizontal"
    */
   orientation?: TabsOrientation;
+  /**
+   * Whether moving focus with the arrow keys also selects the tab.
+   * - `"automatic"` (default) — selection follows focus.
+   * - `"manual"` — arrows only move focus; Space / Enter selects.
+   *
+   * @default "automatic"
+   */
+  activationMode?: TabsActivationMode;
+  /** Wrap arrow navigation past the first / last trigger. @default true */
+  loop?: boolean;
   /** Compound-component children: `Tabs.List`, `Tabs.Trigger`, `Tabs.Content`. */
   children?: React.ReactNode;
 }
@@ -49,16 +61,20 @@ export interface TabsProps extends Omit<ViewProps, "children"> {
  * on each part, e.g.
  * `<Tabs.Trigger value="a">{({ selected }) => …}</Tabs.Trigger>`.
  *
- * **Keyboard navigation:** GPUI has no programmatic focus API, so roving-focus
- * arrow-key navigation between triggers is not implemented. Tab selection
- * happens on click only. The `orientation` prop is still accepted and exposed
- * via context for consumer-driven styling.
+ * **Keyboard navigation:** the tab list is a single Tab stop (the selected
+ * trigger, or the first enabled trigger when none is selected). The arrow keys
+ * for the `orientation` move focus between triggers — wrapping when `loop` —
+ * and Home / End jump to the first / last. With `activationMode="automatic"`
+ * (default) focus also selects; `"manual"` defers selection to Space / Enter.
+ * Disabled triggers are skipped. Style focus with `_focusVisible`.
  */
 export function Tabs({
   value: valueProp,
   defaultValue,
   onValueChange,
   orientation = "horizontal",
+  activationMode = "automatic",
+  loop = true,
   children,
   ...viewProps
 }: TabsProps): React.ReactElement {
@@ -68,9 +84,19 @@ export function Tabs({
     onChange: onValueChange,
   });
 
+  // Automatic activation selects on focus; manual only moves focus (stable noop
+  // so the roving state doesn't churn its identity every render).
+  const noop = useCallback(() => {}, []);
+  const roving = useRovingFocus({
+    orientation,
+    loop,
+    value,
+    onNavigate: activationMode === "automatic" ? setValue : noop,
+  });
+
   const context = useMemo<TabsContextValue>(
-    () => ({ value, setValue, orientation }),
-    [value, setValue, orientation],
+    () => ({ value, setValue, orientation, roving }),
+    [value, setValue, orientation, roving],
   );
 
   return (
@@ -119,16 +145,23 @@ export interface TabsTriggerProps extends Omit<ViewProps, "children"> {
  *
  * Passes `{ selected, disabled, value }` to render-function children so
  * consumers can style the active/disabled states without any built-in CSS.
+ * Keyboard-navigable via the roving Tab stop described on {@link Tabs}.
  */
 export function TabsTrigger({
   value: itemValue,
   disabled = false,
   children,
   onClick,
+  onKeyDown,
+  onFocus,
+  ref,
+  // Tab order is managed by roving focus; an explicit tabIndex is ignored.
+  tabIndex: _tabIndex,
   ...viewProps
 }: TabsTriggerProps): React.ReactElement {
   const ctx = useTabsContext();
   const selected = ctx.value === itemValue;
+  const roving = useRovingItem(ctx.roving, itemValue, disabled);
 
   const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => {
     if (!disabled) {
@@ -136,8 +169,21 @@ export function TabsTrigger({
     }
   });
 
+  // Arrow / Home / End only; Space/Enter selection (incl. manual mode) comes from
+  // the runtime's click.
+  const handleKeyDown = composeEventHandlers<GpuiKeyboardEvent>(onKeyDown, roving.onKeyDown);
+
+  const handleFocus = composeEventHandlers(onFocus, roving.onFocus);
+
   return (
-    <View {...viewProps} onClick={handleClick}>
+    <View
+      {...viewProps}
+      ref={mergeRefs(ref, roving.ref)}
+      tabIndex={roving.tabIndex}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
+    >
       {renderSlot(children, { selected, disabled, value: itemValue })}
     </View>
   );

@@ -8,7 +8,7 @@ import { Text, View } from "@gluxe/react";
 import { Toggle } from "@gluxe/ui";
 import React, { useState } from "react";
 
-import { theme } from "../theme";
+import { focusRing, theme } from "../theme";
 import { Row, Section } from "../ui-kit";
 
 interface FormatButtonProps {
@@ -29,7 +29,9 @@ function FormatButton({
   textDecorationLine = "none",
 }: FormatButtonProps): React.ReactElement {
   return (
-    <Toggle pressed={pressed} onPressedChange={onPressedChange}>
+    // Toggle is itself the focusable node, so the focus ring goes here — not on
+    // the inner View. Tab reaches it; Space / Enter flip the pressed state.
+    <Toggle pressed={pressed} onPressedChange={onPressedChange} style={focusRing(8)}>
       {({ pressed }) => (
         <View
           style={{
@@ -72,7 +74,7 @@ export function ToggleSection(): React.ReactElement {
   return (
     <Section
       title="Toggle"
-      description="A headless pressable with boolean pressed state. The button shape, active colour, and hover tint are styled here via render-function children that read pressed."
+      description="A headless pressable with boolean pressed state. The button shape, active colour, and hover tint are styled here via render-function children that read pressed. Tab to focus a button and press Space or Enter to toggle it."
     >
       <Row>
         <FormatButton pressed={bold} onPressedChange={setBold} label="B" fontWeight="bold" />

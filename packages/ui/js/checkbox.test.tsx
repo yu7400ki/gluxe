@@ -38,6 +38,17 @@ function click(text: string): void {
   });
 }
 
+/** Dispatch a GPUI-named key (e.g. "space", "enter") on the leaf with `text`. */
+function keydown(text: string, key: string): void {
+  const leaf = [...container.querySelectorAll("*")].find(
+    (el) => el.children.length === 0 && el.textContent === text,
+  );
+  if (!leaf) throw new Error(`No element with text "${text}" in:\n${container.innerHTML}`);
+  act(() => {
+    leaf.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
 describe("Checkbox", () => {
   it("Indicator is absent when unchecked", () => {
     render(
@@ -187,5 +198,42 @@ describe("Checkbox", () => {
     );
     click("check");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("is focusable by default (tabIndex 0)", () => {
+    render(
+      <Checkbox>
+        <Text>check</Text>
+      </Checkbox>,
+    );
+    expect(container.querySelector("[tabindex]")?.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("a disabled checkbox is removed from the Tab order", () => {
+    render(
+      <Checkbox disabled>
+        <Text>check</Text>
+      </Checkbox>,
+    );
+    expect(container.querySelector("[tabindex]")).toBeNull();
+  });
+
+  // Activation comes from the runtime's synthesized click, not a key-down (double-fire guard).
+  it("does not toggle on a raw Space/Enter key-down (avoids double activation)", () => {
+    const onChange = vi.fn();
+    render(
+      <Checkbox defaultChecked={false} onCheckedChange={onChange}>
+        <View>
+          <Text>check</Text>
+          <Checkbox.Indicator>
+            <Text>indicator</Text>
+          </Checkbox.Indicator>
+        </View>
+      </Checkbox>,
+    );
+    keydown("check", "space");
+    keydown("check", "enter");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("indicator");
   });
 });

@@ -1,6 +1,7 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
+import { Button } from "./button";
 import { composeEventHandlers } from "./internal/compose";
 import { createSafeContext } from "./internal/context";
 import { useControllableState } from "./internal/controllable-state";
@@ -223,7 +224,10 @@ export interface AccordionTriggerProps extends Omit<ViewProps, "children"> {
 
 /**
  * The pressable header of an {@link AccordionItem}. Toggles the item open or
- * closed on click; does nothing when the item or accordion is disabled.
+ * closed on click, or with Space / Enter while focused (the runtime activates a
+ * focused control's click handler); does nothing when the item or accordion is
+ * disabled. Each header is focusable via Tab (`tabIndex={0}`); a disabled header
+ * leaves the Tab order.
  */
 export function AccordionTrigger({
   children,
@@ -233,16 +237,16 @@ export function AccordionTrigger({
   const accordionCtx = useAccordionContext();
   const itemState = useAccordionItemContext();
 
-  const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => {
-    if (!itemState.disabled) {
-      accordionCtx.toggle(itemState.value);
-    }
-  });
-
   return (
-    <View {...viewProps} onClick={handleClick}>
+    <Button
+      {...viewProps}
+      disabled={itemState.disabled}
+      onClick={composeEventHandlers<GpuiMouseEvent>(onClick, () =>
+        accordionCtx.toggle(itemState.value),
+      )}
+    >
       {renderSlot(children, itemState)}
-    </View>
+    </Button>
   );
 }
 AccordionTrigger.displayName = "Accordion.Trigger";

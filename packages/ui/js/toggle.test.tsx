@@ -39,6 +39,17 @@ function click(text: string): void {
   });
 }
 
+/** Dispatch a GPUI-named key (e.g. "space", "enter") on the leaf with `text`. */
+function keydown(text: string, key: string): void {
+  const leaf = [...container.querySelectorAll("*")].find(
+    (el) => el.children.length === 0 && el.textContent === text,
+  );
+  if (!leaf) throw new Error(`No element with text "${text}" in:\n${container.innerHTML}`);
+  act(() => {
+    leaf.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
 describe("Toggle", () => {
   it("starts unpressed by default", () => {
     render(
@@ -135,5 +146,36 @@ describe("Toggle", () => {
       </Toggle>,
     );
     expect(container.textContent).toContain("pressed");
+  });
+
+  it("is focusable by default (tabIndex 0)", () => {
+    render(
+      <Toggle>
+        <Text>btn</Text>
+      </Toggle>,
+    );
+    expect(container.querySelector("[tabindex]")?.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("a disabled toggle is removed from the Tab order", () => {
+    render(
+      <Toggle disabled>
+        <Text>btn</Text>
+      </Toggle>,
+    );
+    expect(container.querySelector("[tabindex]")).toBeNull();
+  });
+
+  // Activation comes from the runtime's synthesized click, not a key-down (double-fire guard).
+  it("does not toggle on a raw Space/Enter key-down (avoids double activation)", () => {
+    const onChange = vi.fn();
+    render(
+      <Toggle onPressedChange={onChange}>
+        <Text>btn</Text>
+      </Toggle>,
+    );
+    keydown("btn", "space");
+    keydown("btn", "enter");
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

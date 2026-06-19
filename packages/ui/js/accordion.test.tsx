@@ -38,6 +38,17 @@ function click(text: string): void {
   });
 }
 
+/** Dispatch a GPUI-named key (e.g. "space", "enter") on the leaf with `text`. */
+function keydown(text: string, key: string): void {
+  const leaf = [...container.querySelectorAll("*")].find(
+    (el) => el.children.length === 0 && el.textContent === text,
+  );
+  if (!leaf) throw new Error(`No element with text "${text}" in:\n${container.innerHTML}`);
+  act(() => {
+    leaf.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
 /** Two-item accordion used across single-mode tests. */
 function SingleAccordion({
   collapsible,
@@ -215,5 +226,46 @@ describe("Accordion — type=multiple", () => {
     render(<MultiAccordion defaultValue={["a", "b"]} />);
     expect(container.textContent).toContain("content-a");
     expect(container.textContent).toContain("content-b");
+  });
+});
+
+describe("Accordion — keyboard / focus", () => {
+  it("every trigger is focusable (each header has tabIndex 0, no roving)", () => {
+    render(<SingleAccordion />);
+    const tabbable = [...container.querySelectorAll("[tabindex]")];
+    expect(tabbable.map((el) => el.getAttribute("tabindex"))).toEqual(["0", "0"]);
+  });
+
+  it("a disabled item's trigger is removed from the Tab order", () => {
+    render(
+      <Accordion type="single">
+        <Accordion.Item value="a" disabled>
+          <Accordion.Trigger>
+            <Text>header-a</Text>
+          </Accordion.Trigger>
+          <Accordion.Content>
+            <Text>content-a</Text>
+          </Accordion.Content>
+        </Accordion.Item>
+        <Accordion.Item value="b">
+          <Accordion.Trigger>
+            <Text>header-b</Text>
+          </Accordion.Trigger>
+          <Accordion.Content>
+            <Text>content-b</Text>
+          </Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    // Only the enabled item's trigger is tabbable.
+    expect(container.querySelectorAll("[tabindex]").length).toBe(1);
+  });
+
+  // Activation comes from the runtime's synthesized click, not a key-down (double-fire guard).
+  it("does not toggle on a raw Space/Enter key-down (avoids double activation)", () => {
+    render(<SingleAccordion />);
+    keydown("header-a", "space");
+    keydown("header-a", "enter");
+    expect(container.textContent).not.toContain("content-a");
   });
 });

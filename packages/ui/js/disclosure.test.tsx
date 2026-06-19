@@ -38,6 +38,17 @@ function click(text: string): void {
   });
 }
 
+/** Dispatch a GPUI-named key (e.g. "space", "enter") on the leaf with `text`. */
+function keydown(text: string, key: string): void {
+  const leaf = [...container.querySelectorAll("*")].find(
+    (el) => el.children.length === 0 && el.textContent === text,
+  );
+  if (!leaf) throw new Error(`No element with text "${text}" in:\n${container.innerHTML}`);
+  act(() => {
+    leaf.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
 describe("Disclosure", () => {
   it("content is unmounted when closed by default", () => {
     render(
@@ -159,5 +170,44 @@ describe("Disclosure", () => {
     );
     click("toggle");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("the trigger is focusable by default (tabIndex 0)", () => {
+    render(
+      <Disclosure>
+        <Disclosure.Trigger>
+          <Text>toggle</Text>
+        </Disclosure.Trigger>
+      </Disclosure>,
+    );
+    expect(container.querySelector("[tabindex]")?.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("a disabled trigger is removed from the Tab order", () => {
+    render(
+      <Disclosure disabled>
+        <Disclosure.Trigger>
+          <Text>toggle</Text>
+        </Disclosure.Trigger>
+      </Disclosure>,
+    );
+    expect(container.querySelector("[tabindex]")).toBeNull();
+  });
+
+  // Activation comes from the runtime's synthesized click, not a key-down (double-fire guard).
+  it("does not toggle on a raw Space/Enter key-down (avoids double activation)", () => {
+    render(
+      <Disclosure defaultOpen={false}>
+        <Disclosure.Trigger>
+          <Text>toggle</Text>
+        </Disclosure.Trigger>
+        <Disclosure.Content>
+          <Text>body</Text>
+        </Disclosure.Content>
+      </Disclosure>,
+    );
+    keydown("toggle", "space");
+    keydown("toggle", "enter");
+    expect(container.textContent).not.toContain("body");
   });
 });

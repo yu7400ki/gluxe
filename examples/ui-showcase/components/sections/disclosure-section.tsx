@@ -6,18 +6,20 @@ import { Text, View } from "@gluxe/react";
 import { Disclosure } from "@gluxe/ui";
 import React from "react";
 
-import { theme } from "../theme";
+import { focusRing, theme } from "../theme";
 import { Section } from "../ui-kit";
 
 export function DisclosureSection(): React.ReactElement {
   return (
     <Section
       title="Disclosure (Collapsible)"
-      description="A headless expand/collapse region. The trigger header and content panel are styled here; Disclosure supplies open state and toggle behaviour with no built-in styles."
+      description="A headless expand/collapse region. The trigger header and content panel are styled here; Disclosure supplies open state and toggle behaviour with no built-in styles. The trigger is reachable with Tab and toggles on Space or Enter."
     >
       <Disclosure defaultOpen={false} style={{ display: "flex", flexDirection: "column" }}>
         <>
-          <Disclosure.Trigger>
+          {/* Disclosure.Trigger is the focusable node — Tab to it, Space / Enter
+              to expand. Ring radius matches the header's 10px corners. */}
+          <Disclosure.Trigger style={focusRing(10)}>
             {({ open }) => (
               <View
                 style={{

@@ -38,6 +38,17 @@ function click(text: string): void {
   });
 }
 
+/** Dispatch a GPUI-named key (e.g. "space", "enter") on the leaf with `text`. */
+function keydown(text: string, key: string): void {
+  const leaf = [...container.querySelectorAll("*")].find(
+    (el) => el.children.length === 0 && el.textContent === text,
+  );
+  if (!leaf) throw new Error(`No element with text "${text}" in:\n${container.innerHTML}`);
+  act(() => {
+    leaf.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
 describe("Switch", () => {
   it("starts unchecked by default", () => {
     render(
@@ -188,6 +199,37 @@ describe("Switch", () => {
       </Switch>,
     );
     click("switch");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("is focusable by default (tabIndex 0)", () => {
+    render(
+      <Switch>
+        <Text>switch</Text>
+      </Switch>,
+    );
+    expect(container.querySelector("[tabindex]")?.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("a disabled switch is removed from the Tab order", () => {
+    render(
+      <Switch disabled>
+        <Text>switch</Text>
+      </Switch>,
+    );
+    expect(container.querySelector("[tabindex]")).toBeNull();
+  });
+
+  // Activation comes from the runtime's synthesized click, not a key-down (double-fire guard).
+  it("does not toggle on a raw Space/Enter key-down (avoids double activation)", () => {
+    const onChange = vi.fn();
+    render(
+      <Switch onCheckedChange={onChange}>
+        <Text>switch</Text>
+      </Switch>,
+    );
+    keydown("switch", "space");
+    keydown("switch", "enter");
     expect(onChange).not.toHaveBeenCalled();
   });
 });

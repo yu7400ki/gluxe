@@ -8,7 +8,7 @@ import { View } from "@gluxe/react";
 import { Switch } from "@gluxe/ui";
 import React, { useState } from "react";
 
-import { theme } from "../theme";
+import { focusRing, theme } from "../theme";
 import { Label, Row, Section } from "../ui-kit";
 
 function StyledSwitch({
@@ -19,7 +19,10 @@ function StyledSwitch({
   onCheckedChange: (next: boolean) => void;
 }): React.ReactElement {
   return (
-    <Switch checked={checked} onCheckedChange={onCheckedChange}>
+    // Switch is the focusable node; a pill-shaped ring matches the track. Tab to
+    // focus, Space / Enter to flip. (The disabled switch below is out of the Tab
+    // order, so it needs no ring.)
+    <Switch checked={checked} onCheckedChange={onCheckedChange} style={focusRing(999)}>
       {({ checked }) => (
         <View
           style={{
@@ -62,7 +65,7 @@ export function SwitchSection(): React.ReactElement {
   return (
     <Section
       title="Switch"
-      description="A boolean on/off control. The track and the sliding thumb are styled here; the thumb animates by reading checked from render-function children."
+      description="A boolean on/off control. The track and the sliding thumb are styled here; the thumb animates by reading checked from render-function children. Tab to focus and press Space or Enter to flip it; a disabled switch is skipped in the Tab order."
     >
       <Row>
         <StyledSwitch checked={wifi} onCheckedChange={setWifi} />

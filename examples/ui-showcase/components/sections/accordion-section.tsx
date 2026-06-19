@@ -6,7 +6,7 @@ import { Text, View } from "@gluxe/react";
 import { Accordion } from "@gluxe/ui";
 import React from "react";
 
-import { theme } from "../theme";
+import { focusRing, theme } from "../theme";
 import { Section } from "../ui-kit";
 
 const faqs = [
@@ -23,7 +23,7 @@ const faqs = [
   {
     value: "q3",
     q: "Does the Accordion support keyboard navigation between items?",
-    a: "Not currently. GPUI does not expose a programmatic focus API at this revision, so arrow-key navigation between triggers is not provided. A single trigger can still be activated with a pointer click.",
+    a: "Yes. Each trigger is reachable with Tab and expands or collapses on Space or Enter, with a focus ring shown while you navigate with the keyboard. Disabled triggers are skipped in the Tab order.",
   },
 ];
 
@@ -31,7 +31,7 @@ export function AccordionSection(): React.ReactElement {
   return (
     <Section
       title="Accordion"
-      description="A headless expandable list. Open/close state is managed by the component; every colour and layout detail is defined here."
+      description="A headless expandable list. Open/close state is managed by the component; every colour and layout detail is defined here. Each trigger is a Tab stop that expands or collapses on Space or Enter."
     >
       <Accordion
         type="single"
@@ -45,7 +45,11 @@ export function AccordionSection(): React.ReactElement {
             value={item.value}
             style={{ display: "flex", flexDirection: "column" }}
           >
-            <Accordion.Trigger style={{ display: "flex", flexDirection: "column" }}>
+            {/* Accordion.Trigger is the focusable node — Tab to it, Space / Enter
+                to expand. Ring radius matches the header's top corners. */}
+            <Accordion.Trigger
+              style={{ display: "flex", flexDirection: "column", ...focusRing(10) }}
+            >
               {({ open }) => (
                 <View
                   style={{

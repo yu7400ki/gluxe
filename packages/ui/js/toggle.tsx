@@ -1,6 +1,7 @@
-import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
+import { type GpuiMouseEvent, type ViewProps } from "@gluxe/react";
 import React from "react";
 
+import { Button } from "./button";
 import { composeEventHandlers } from "./internal/compose";
 import { useControllableState } from "./internal/controllable-state";
 import { renderSlot, type Slot } from "./internal/slot";
@@ -41,6 +42,12 @@ export interface ToggleProps extends Omit<ViewProps, "children"> {
  * - **Uncontrolled**: omit `pressed`; optionally supply `defaultPressed`.
  * - **Controlled**: supply `pressed` and update it in `onPressedChange`.
  *
+ * ### Keyboard & focus
+ * Focusable via Tab (`tabIndex={0}`) and toggled with Space or Enter (the
+ * runtime activates a focused control's click handler). A `disabled` toggle is
+ * removed from the Tab order. Style the focused state with the `_focus` /
+ * `_focusVisible` style props.
+ *
  * ### Disabled
  * When `disabled` is `true` the click handler is swallowed before any state
  * change occurs. `onPressedChange` is never called.
@@ -60,16 +67,14 @@ export function Toggle({
     onChange: onPressedChange,
   });
 
-  const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => {
-    if (!disabled) {
-      setPressed(!pressed);
-    }
-  });
-
   return (
-    <View {...viewProps} onClick={handleClick}>
+    <Button
+      {...viewProps}
+      disabled={disabled}
+      onClick={composeEventHandlers<GpuiMouseEvent>(onClick, () => setPressed(!pressed))}
+    >
       {renderSlot(children, { pressed, disabled })}
-    </View>
+    </Button>
   );
 }
 Toggle.displayName = "Toggle";

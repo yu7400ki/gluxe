@@ -1,6 +1,7 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
+import { Button } from "./button";
 import { composeEventHandlers } from "./internal/compose";
 import { createSafeContext } from "./internal/context";
 import { useControllableState } from "./internal/controllable-state";
@@ -52,11 +53,8 @@ export function Disclosure({
     onChange: onOpenChange,
   });
 
-  const toggle = useCallback(() => {
-    if (!disabled) {
-      setOpen(!open);
-    }
-  }, [disabled, open, setOpen]);
+  // No disabled guard: the trigger's <Button> suppresses onClick while disabled.
+  const toggle = useCallback(() => setOpen(!open), [open, setOpen]);
 
   const context = useMemo<DisclosureContextValue>(
     () => ({ open, disabled, toggle }),
@@ -75,19 +73,27 @@ export interface DisclosureTriggerProps extends Omit<ViewProps, "children"> {
   children?: Slot<DisclosureState>;
 }
 
-/** Toggles the disclosure on click. Inherits all `<View>` props. */
+/**
+ * Toggles the disclosure on click, or with Space / Enter while focused (the
+ * runtime activates a focused control's click handler). Focusable via Tab
+ * (`tabIndex={0}`); a `disabled` trigger leaves the Tab order. Inherits all
+ * `<View>` props.
+ */
 export function DisclosureTrigger({
   children,
   onClick,
   ...viewProps
 }: DisclosureTriggerProps): React.ReactElement {
   const { open, disabled, toggle } = useDisclosureContext();
-  const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => toggle());
 
   return (
-    <View {...viewProps} onClick={handleClick}>
+    <Button
+      {...viewProps}
+      disabled={disabled}
+      onClick={composeEventHandlers<GpuiMouseEvent>(onClick, toggle)}
+    >
       {renderSlot(children, { open, disabled })}
-    </View>
+    </Button>
   );
 }
 DisclosureTrigger.displayName = "Disclosure.Trigger";

@@ -1,9 +1,11 @@
-import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
+import { type GpuiKeyboardEvent, type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useMemo } from "react";
 
 import { composeEventHandlers } from "./internal/compose";
 import { createSafeContext } from "./internal/context";
 import { useControllableState } from "./internal/controllable-state";
+import { mergeRefs } from "./internal/merge-refs";
+import { type RovingFocus, useRovingFocus, useRovingItem } from "./internal/roving-focus";
 import { renderSlot, type Slot } from "./internal/slot";
 
 /** State the RadioGroup root exposes to its render-function children. */
@@ -16,6 +18,7 @@ interface RadioGroupContextValue {
   value: string | undefined;
   setValue: (value: string) => void;
   disabled: boolean;
+  roving: RovingFocus;
 }
 
 /** State a RadioGroup.Item (and its children) exposes to render-function children. */
@@ -57,6 +60,12 @@ export interface RadioGroupProps extends Omit<ViewProps, "children"> {
  *
  * Supports both controlled (`value` + `onValueChange`) and uncontrolled
  * (`defaultValue`) usage.
+ *
+ * **Keyboard & focus:** the group is a single Tab stop (the selected item, or
+ * the first enabled item when none is selected). Arrow keys (any direction)
+ * move focus between items and select as they go (selection follows focus,
+ * matching native radios), wrapping at the ends and skipping disabled items.
+ * Home / End jump to the first / last item. Style focus with `_focusVisible`.
  */
 export function RadioGroup({
   value: valueProp,
@@ -72,9 +81,12 @@ export function RadioGroup({
     onChange: onValueChange,
   });
 
+  // Radios respond to all four arrows; selection follows focus.
+  const roving = useRovingFocus({ orientation: "both", loop: true, value, onNavigate: setValue });
+
   const context = useMemo<RadioGroupContextValue>(
-    () => ({ value, setValue, disabled }),
-    [value, setValue, disabled],
+    () => ({ value, setValue, disabled, roving }),
+    [value, setValue, disabled, roving],
   );
 
   return (
@@ -110,18 +122,29 @@ export function RadioGroupItem({
   disabled: itemDisabled = false,
   children,
   onClick,
+  onKeyDown,
+  onFocus,
+  ref,
+  // Tab order is managed by roving focus; an explicit tabIndex is ignored.
+  tabIndex: _tabIndex,
   ...viewProps
 }: RadioGroupItemProps): React.ReactElement {
   const group = useRadioGroupContext();
 
   const checked = group.value === itemValue;
   const disabled = group.disabled || itemDisabled;
+  const roving = useRovingItem(group.roving, itemValue, disabled);
 
   const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => {
     if (!disabled) {
       group.setValue(itemValue);
     }
   });
+
+  // Arrow / Home / End only; Space/Enter selection comes from the runtime's click.
+  const handleKeyDown = composeEventHandlers<GpuiKeyboardEvent>(onKeyDown, roving.onKeyDown);
+
+  const handleFocus = composeEventHandlers(onFocus, roving.onFocus);
 
   const itemCtx = useMemo<RadioItemContextValue>(
     () => ({ checked, disabled, value: itemValue }),
@@ -130,7 +153,14 @@ export function RadioGroupItem({
 
   return (
     <RadioItemContextProvider value={itemCtx}>
-      <View {...viewProps} onClick={handleClick}>
+      <View
+        {...viewProps}
+        ref={mergeRefs(ref, roving.ref)}
+        tabIndex={roving.tabIndex}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
+      >
         {renderSlot(children, itemCtx)}
       </View>
     </RadioItemContextProvider>

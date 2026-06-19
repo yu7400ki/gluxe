@@ -1,6 +1,7 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
+import { Button } from "./button";
 import { composeEventHandlers } from "./internal/compose";
 import { createSafeContext } from "./internal/context";
 import { useControllableState } from "./internal/controllable-state";
@@ -37,6 +38,10 @@ export interface SwitchProps extends Omit<ViewProps, "children"> {
  *
  * Headless: no styles are applied. Read state via render-function children to
  * style by state, e.g. `<Switch>{({ checked }) => …}</Switch>`.
+ *
+ * Focusable via Tab and toggled with Space or Enter (the runtime activates a
+ * focused control's click handler); a `disabled` switch is removed from the Tab
+ * order. Style the focused state with `_focus` / `_focusVisible`.
  */
 export function Switch({
   checked: checkedProp,
@@ -53,11 +58,8 @@ export function Switch({
     onChange: onCheckedChange,
   });
 
-  const toggle = useCallback(() => {
-    if (!disabled) {
-      setChecked(!checked);
-    }
-  }, [disabled, checked, setChecked]);
+  // No disabled guard: <Button> suppresses onClick while disabled.
+  const toggle = useCallback(() => setChecked(!checked), [checked, setChecked]);
 
   const context = useMemo<SwitchContextValue>(
     () => ({ checked, disabled, toggle }),
@@ -66,9 +68,13 @@ export function Switch({
 
   return (
     <SwitchContextProvider value={context}>
-      <View {...viewProps} onClick={composeEventHandlers<GpuiMouseEvent>(onClick, toggle)}>
+      <Button
+        {...viewProps}
+        disabled={disabled}
+        onClick={composeEventHandlers<GpuiMouseEvent>(onClick, toggle)}
+      >
         {renderSlot(children, { checked, disabled })}
-      </View>
+      </Button>
     </SwitchContextProvider>
   );
 }

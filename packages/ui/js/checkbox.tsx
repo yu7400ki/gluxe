@@ -1,6 +1,7 @@
 import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
+import { Button } from "./button";
 import { composeEventHandlers } from "./internal/compose";
 import { createSafeContext } from "./internal/context";
 import { useControllableState } from "./internal/controllable-state";
@@ -57,6 +58,10 @@ export interface CheckboxProps extends Omit<ViewProps, "children"> {
  * ```
  *
  * Headless: no styles are applied. All `<View>` props are forwarded.
+ *
+ * Focusable via Tab and toggled with Space or Enter (the runtime activates a
+ * focused control's click handler); a `disabled` checkbox is removed from the
+ * Tab order. Style the focused state with `_focus` / `_focusVisible`.
  */
 export function Checkbox({
   checked: checkedProp,
@@ -75,12 +80,12 @@ export function Checkbox({
     defaultProp: defaultChecked,
   });
 
+  // No disabled guard: <Button> suppresses onClick while disabled.
   const toggle = useCallback(() => {
-    if (disabled) return;
     const next = checkedState !== true;
     setCheckedState(next);
     onCheckedChange?.(next);
-  }, [disabled, checkedState, setCheckedState, onCheckedChange]);
+  }, [checkedState, setCheckedState, onCheckedChange]);
 
   const context = useMemo<CheckboxContextValue>(
     () => ({ checked: checkedState, disabled, toggle }),
@@ -89,9 +94,13 @@ export function Checkbox({
 
   return (
     <CheckboxContextProvider value={context}>
-      <View {...viewProps} onClick={composeEventHandlers<GpuiMouseEvent>(onClick, () => toggle())}>
+      <Button
+        {...viewProps}
+        disabled={disabled}
+        onClick={composeEventHandlers<GpuiMouseEvent>(onClick, toggle)}
+      >
         {renderSlot(children, { checked: checkedState, disabled })}
-      </View>
+      </Button>
     </CheckboxContextProvider>
   );
 }
