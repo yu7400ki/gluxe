@@ -241,6 +241,29 @@ fn set_handle_offset(handle: &ScrollHandle, axis: Axis, value: f32) {
     handle.set_offset(offset);
 }
 
+/// Map a pointer position along the track to a scroll offset (`click_to_offset`)
+/// and write it to the handle. `grab` is the pointer's distance from the thumb's
+/// leading edge: `thumb_len / 2` for a track-click center-jump, the stored grab
+/// while dragging.
+fn apply_offset_from_pointer(
+    handle: &ScrollHandle,
+    axis: Axis,
+    track_bounds: &Bounds<Pixels>,
+    thumb_bounds: &Bounds<Pixels>,
+    pointer: Pixels,
+    grab: f32,
+) {
+    let new = click_to_offset(
+        f32::from(track_bounds.size.along(axis)),
+        f32::from(thumb_bounds.size.along(axis)),
+        f32::from(track_bounds.origin.along(axis)),
+        f32::from(pointer),
+        f32::from(handle.max_offset().along(axis)),
+        grab,
+    );
+    set_handle_offset(handle, axis, new);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn scrollbar_canvas(
     target: ElementId,
@@ -340,17 +363,15 @@ fn scrollbar_canvas(
                             set_drag_grab(target, axis, grab);
                         } else {
                             // Track click: center the thumb on the pointer.
-                            let max_offset = f32::from(handle.max_offset().along(axis));
                             let thumb_len = f32::from(thumb_bounds.size.along(axis));
-                            let new = click_to_offset(
-                                f32::from(track_bounds.size.along(axis)),
-                                thumb_len,
-                                f32::from(track_bounds.origin.along(axis)),
-                                f32::from(event.position.along(axis)),
-                                max_offset,
+                            apply_offset_from_pointer(
+                                &handle,
+                                axis,
+                                &track_bounds,
+                                &thumb_bounds,
+                                event.position.along(axis),
                                 thumb_len / 2.0,
                             );
-                            set_handle_offset(&handle, axis, new);
                         }
                         window.refresh();
                         cx.stop_propagation();
@@ -371,16 +392,14 @@ fn scrollbar_canvas(
                             clear_drag_grab(target, axis);
                             return;
                         }
-                        let max_offset = f32::from(handle.max_offset().along(axis));
-                        let new = click_to_offset(
-                            f32::from(track_bounds.size.along(axis)),
-                            f32::from(thumb_bounds.size.along(axis)),
-                            f32::from(track_bounds.origin.along(axis)),
-                            f32::from(event.position.along(axis)),
-                            max_offset,
+                        apply_offset_from_pointer(
+                            &handle,
+                            axis,
+                            &track_bounds,
+                            &thumb_bounds,
+                            event.position.along(axis),
                             grab,
                         );
-                        set_handle_offset(&handle, axis, new);
                         window.refresh();
                         cx.stop_propagation();
                     }
