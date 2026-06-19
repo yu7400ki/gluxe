@@ -1,7 +1,7 @@
 // Unit tests for the pure roving-focus navigation helpers.
 import { describe, expect, it } from "vitest";
 
-import { arrowDirection, nextEnabledIndex } from "./roving-focus";
+import { arrowDirection, nextEnabledIndex, type RovingItem, typeaheadMatch } from "./roving-focus";
 
 describe("arrowDirection", () => {
   it("maps Home/End regardless of orientation", () => {
@@ -81,5 +81,69 @@ describe("nextEnabledIndex", () => {
 
   it("returns null for an empty list", () => {
     expect(nextEnabledIndex([], 0, 1, true)).toBeNull();
+  });
+});
+
+describe("typeaheadMatch", () => {
+  const item = (
+    value: string,
+    opts: { disabled?: boolean; textValue?: string } = {},
+  ): RovingItem => ({
+    value,
+    disabled: opts.disabled ?? false,
+    textValue: opts.textValue,
+    focus: () => {},
+  });
+
+  const fruits = [item("apple"), item("apricot"), item("banana"), item("cherry")];
+
+  it("matches the first option with the typed prefix", () => {
+    expect(typeaheadMatch(fruits, undefined, "b")).toBe("banana");
+  });
+
+  it("is case-insensitive", () => {
+    expect(typeaheadMatch(fruits, undefined, "B")).toBe("banana");
+    expect(typeaheadMatch([item("Banana")], undefined, "ba")).toBe("Banana");
+  });
+
+  it("skips disabled options", () => {
+    const list = [item("apple"), item("banana", { disabled: true }), item("blueberry")];
+    expect(typeaheadMatch(list, undefined, "b")).toBe("blueberry");
+  });
+
+  it("wraps from the current option back to the start", () => {
+    // Current = cherry (last); typing "a" wraps round to apple.
+    expect(typeaheadMatch(fruits, "cherry", "a")).toBe("apple");
+  });
+
+  it("cycles same-prefix options on a single / repeated char (advances past current)", () => {
+    expect(typeaheadMatch(fruits, "apple", "a")).toBe("apricot");
+    // A repeated char ("aa") matches just "a" and keeps advancing → wraps to apple.
+    expect(typeaheadMatch(fruits, "apricot", "aa")).toBe("apple");
+  });
+
+  it("refines in place for a distinct multi-char prefix (does not advance)", () => {
+    // apricot still matches "ap" → stays put rather than jumping to apple.
+    expect(typeaheadMatch(fruits, "apricot", "ap")).toBe("apricot");
+    // From a non-matching current, a multi-char prefix searches forward.
+    expect(typeaheadMatch(fruits, "banana", "ap")).toBe("apple");
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(typeaheadMatch(fruits, undefined, "z")).toBeNull();
+  });
+
+  it("returns null for an empty buffer", () => {
+    expect(typeaheadMatch(fruits, "apple", "")).toBeNull();
+  });
+
+  it("matches textValue when it differs from value", () => {
+    const list = [item("us", { textValue: "United States" }), item("ca", { textValue: "Canada" })];
+    expect(typeaheadMatch(list, undefined, "ca")).toBe("ca");
+    expect(typeaheadMatch(list, undefined, "u")).toBe("us");
+  });
+
+  it("falls back to index 0 when the current value is unknown", () => {
+    expect(typeaheadMatch(fruits, "nonexistent", "a")).toBe("apple");
   });
 });

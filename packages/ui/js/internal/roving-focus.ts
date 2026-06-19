@@ -63,6 +63,9 @@ export function nextEnabledIndex(
 export interface RovingItem {
   value: string;
   disabled: boolean;
+  /** Text matched by Select type-ahead (case-insensitive prefix). Falls back to
+   *  `value` when unset — set it when the visible label differs from `value`. */
+  textValue?: string;
   /** Move keyboard focus to this item's element. */
   focus: () => void;
 }
@@ -114,6 +117,52 @@ function nextItemForKey(
   else if (dir === "last") target = nextEnabledIndex(items, items.length, -1, false);
   else target = nextEnabledIndex(items, from, dir, loop);
   return target === null ? null : items[target];
+}
+
+/** Rotate `arr` so element `start` comes first, wrapping the rest after the end. */
+function wrapArray<T>(arr: readonly T[], start: number): T[] {
+  return arr.map((_, i) => arr[(start + i) % arr.length]);
+}
+
+/**
+ * The option to highlight for a type-ahead `buffer` (accumulated printable keys),
+ * searching from `currentValue`, or `null` when nothing enabled matches. Pure —
+ * covered by unit tests; the caller owns buffering / the idle reset.
+ *
+ * Mirrors the ARIA listbox type-ahead (Radix's `getNextMatch`):
+ * - A buffer of the *same* char repeated (e.g. `"aa"`) matches just that char and
+ *   advances past the current option, so repeats cycle through matches.
+ * - A distinct multi-char buffer (e.g. `"ap"`) is matched as a full prefix from
+ *   the current option, so a growing string refines in place.
+ * Matching is case-insensitive on `textValue ?? value` and skips disabled options.
+ * The search wraps (end → start) so any matching option is reachable.
+ */
+export function typeaheadMatch(
+  items: readonly RovingItem[],
+  currentValue: string | undefined,
+  buffer: string,
+): string | null {
+  if (buffer === "") return null;
+  const enabled = items.filter((i) => !i.disabled);
+  if (enabled.length === 0) return null;
+
+  const isRepeat = buffer.length > 1 && [...buffer].every((c) => c === buffer[0]);
+  const search = (isRepeat ? buffer[0] : buffer).toLowerCase();
+
+  // Rotate so the search starts at the current highlight (C2: fall back to 0 when
+  // the highlight is unset or not found, so we never index out of range).
+  const currentIndex = currentValue ? enabled.findIndex((i) => i.value === currentValue) : -1;
+  let candidates = wrapArray(enabled, currentIndex < 0 ? 0 : currentIndex);
+
+  // A single-char search advances to the NEXT match (drop the current option so a
+  // press moves off it and repeats cycle); a multi-char prefix keeps the current
+  // option as a candidate so refining can stay put.
+  if (search.length === 1 && currentIndex >= 0) {
+    candidates = candidates.filter((i) => i.value !== currentValue);
+  }
+
+  const match = candidates.find((i) => (i.textValue ?? i.value).toLowerCase().startsWith(search));
+  return match ? match.value : null;
 }
 
 export interface UseRovingFocusParams {
@@ -262,6 +311,9 @@ export interface ListNavigation {
   focusInitial: (preferred: string | undefined) => void;
 }
 
+/** Idle window after the last printable key before the type-ahead buffer resets. */
+const TYPEAHEAD_RESET_MS = 500;
+
 /**
  * Highlight-channel navigation for a Select dropdown, over the shared item
  * registry. The highlight is internal state; options drive it via {@link useListItem}.
@@ -270,14 +322,69 @@ export function useListNavigation({ loop }: { loop: boolean }): ListNavigation {
   const { register, items } = useItemRegistry();
   const [highlighted, setHighlighted] = useState<string | undefined>(undefined);
 
+  // Type-ahead buffer + idle-reset timer. Refs so accumulating keys does not
+  // re-render; the pure `typeaheadMatch` owns the matching, this owns timing.
+  const buffer = useRef("");
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTypeahead = useCallback(() => {
+    buffer.current = "";
+    if (resetTimer.current !== null) {
+      clearTimeout(resetTimer.current);
+      resetTimer.current = null;
+    }
+  }, []);
+
+  // C3: drop any pending buffer/timer when the component unmounts.
+  useEffect(() => clearTypeahead, [clearTypeahead]);
+
+  // The single highlight-move path shared by arrow nav AND type-ahead (C1): same
+  // setter + same `focus()`, so the highlight and real keyboard focus never drift.
+  const highlightAndFocus = useCallback(
+    (item: RovingItem) => {
+      setHighlighted(item.value);
+      item.focus();
+    },
+    [],
+  );
+
+  // Wrap the exposed setter so clearing the highlight (list close / reset) also
+  // drops the type-ahead buffer (C3) — the next open starts clean.
+  const setHighlightedExternal = useCallback(
+    (value: string | undefined) => {
+      if (value === undefined) clearTypeahead();
+      setHighlighted(value);
+    },
+    [clearTypeahead],
+  );
+
   const onItemKeyDown = useCallback(
     (value: string, e: GpuiKeyboardEvent) => {
       const next = nextItemForKey(items.current, value, e.key, "vertical", loop);
-      if (!next) return;
-      setHighlighted(next.value);
-      next.focus();
+      if (next) {
+        highlightAndFocus(next);
+        return;
+      }
+      // Type-ahead: a printable char with no command modifier (Shift is allowed —
+      // matching is case-insensitive). `key.length === 1` excludes named keys
+      // ("space", "enter", …) and IME / composed multi-byte input (out of scope).
+      if (e.key.length === 1 && !e.ctrl && !e.alt && !e.meta) {
+        if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+        buffer.current += e.key;
+        resetTimer.current = setTimeout(() => {
+          buffer.current = "";
+          resetTimer.current = null;
+        }, TYPEAHEAD_RESET_MS);
+
+        // Search from the option that dispatched the key (the current highlight).
+        const match = typeaheadMatch(items.current, value, buffer.current);
+        if (match !== null) {
+          const item = items.current.find((i) => i.value === match);
+          if (item) highlightAndFocus(item);
+        }
+      }
     },
-    [items, loop],
+    [items, loop, highlightAndFocus],
   );
 
   const focusInitial = useCallback(
@@ -287,15 +394,20 @@ export function useListNavigation({ loop }: { loop: boolean }): ListNavigation {
       const firstIndex = nextEnabledIndex(list, -1, 1, false);
       const target = selected ?? (firstIndex === null ? undefined : list[firstIndex]);
       if (!target) return;
-      setHighlighted(target.value);
-      target.focus();
+      highlightAndFocus(target);
     },
-    [items],
+    [items, highlightAndFocus],
   );
 
   return useMemo(
-    () => ({ register, highlighted, setHighlighted, onItemKeyDown, focusInitial }),
-    [register, highlighted, onItemKeyDown, focusInitial],
+    () => ({
+      register,
+      highlighted,
+      setHighlighted: setHighlightedExternal,
+      onItemKeyDown,
+      focusInitial,
+    }),
+    [register, highlighted, setHighlightedExternal, onItemKeyDown, focusInitial],
   );
 }
 
@@ -311,6 +423,7 @@ export function useListItem(
   list: ListNavigation,
   value: string,
   disabled: boolean,
+  textValue?: string,
 ): {
   ref: React.RefObject<GpuiInstance | null>;
   onFocus: () => void;
@@ -320,10 +433,12 @@ export function useListItem(
   const itemRef = useRef<RovingItem>({
     value,
     disabled,
+    textValue,
     focus: () => ref.current?.focus(),
   });
   itemRef.current.value = value;
   itemRef.current.disabled = disabled;
+  itemRef.current.textValue = textValue;
 
   const { register } = list;
   useEffect(() => register(itemRef.current), [register]);

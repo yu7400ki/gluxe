@@ -229,5 +229,35 @@ describe("Select", () => {
       keydown("banana", "down");
       expect(onValueChange).not.toHaveBeenCalled();
     });
+
+    it("type-ahead jumps the highlight to the option matching the typed char", () => {
+      render(<FruitSelect defaultOpen />); // apple highlighted
+      keydown("apple", "c");
+      expect(container.textContent).toContain("cherry-hl");
+      expect(container.textContent).not.toContain("apple-hl");
+    });
+
+    it("the type-ahead buffer resets after the idle window", () => {
+      // Fake only the type-ahead timers so React's scheduler keeps real ones.
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        render(<FruitSelect defaultOpen />); // apple highlighted
+        keydown("apple", "b"); // buffer "b" → banana
+        expect(container.textContent).toContain("banana-hl");
+
+        // Let the idle window elapse so the buffer clears.
+        act(() => {
+          vi.advanceTimersByTime(600);
+        });
+
+        // A fresh "c" starts a new search (had the buffer survived, "bc" would
+        // match nothing and the highlight would stay on banana).
+        keydown("banana", "c");
+        expect(container.textContent).toContain("cherry-hl");
+        expect(container.textContent).not.toContain("banana-hl");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

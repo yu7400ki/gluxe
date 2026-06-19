@@ -341,6 +341,13 @@ export interface SelectItemProps extends Omit<ViewProps, "children"> {
   value: string;
   /** Disables this option (cannot be selected or focused). @default false */
   disabled?: boolean;
+  /**
+   * Text matched by keyboard type-ahead (case-insensitive prefix). Defaults to
+   * `value`; set it when the visible label differs from `value` (e.g.
+   * `value="us"` with `textValue="United States"`) so type-ahead matches the
+   * label the user sees rather than the raw value.
+   */
+  textValue?: string;
   children?: Slot<SelectItemState>;
 }
 
@@ -354,6 +361,7 @@ export interface SelectItemProps extends Omit<ViewProps, "children"> {
 export function SelectItem({
   value: itemValue,
   disabled: itemDisabled = false,
+  textValue,
   children,
   onClick,
   onKeyDown,
@@ -368,7 +376,7 @@ export function SelectItem({
   const selected = ctx.value === itemValue;
   const highlighted = ctx.list.highlighted === itemValue;
 
-  const item = useListItem(ctx.list, itemValue, disabled);
+  const item = useListItem(ctx.list, itemValue, disabled, textValue);
 
   const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => {
     if (!disabled) ctx.select(itemValue);
