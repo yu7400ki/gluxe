@@ -226,3 +226,77 @@ fn expand(args: Args, func: ItemFn) -> syn::Result<TokenStream2> {
         }
     })
 }
+
+// ---------------------------------------------------------------------------
+// Tests for the `#[command(...)]` argument parser.
+//
+// `Args: Parse` only touches `syn`/`proc-macro2` types, so it can be exercised
+// directly via `syn::parse_str` (no `proc_macro` token stream required).
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::{Args, Kind};
+
+    // `Args` has no `Debug` impl, so `Result::unwrap`/`unwrap_err` are unavailable;
+    // unwrap via explicit matches instead.
+    fn parse_ok(src: &str) -> Args {
+        match syn::parse_str::<Args>(src) {
+            Ok(a) => a,
+            Err(e) => panic!("expected ok for {src:?}, got error: {e}"),
+        }
+    }
+
+    fn parse_err(src: &str) -> syn::Error {
+        match syn::parse_str::<Args>(src) {
+            Ok(_) => panic!("expected parse error for {src:?}"),
+            Err(e) => e,
+        }
+    }
+
+    #[test]
+    fn conflicting_flavours_is_error() {
+        let err = parse_err("async, stream");
+        assert!(
+            err.to_string().contains("conflicting"),
+            "unexpected message: {err}"
+        );
+    }
+
+    #[test]
+    fn name_only_defaults_to_sync() {
+        let args = parse_ok("name = \"readFile\"");
+        assert_eq!(args.name.as_deref(), Some("readFile"));
+        assert!(matches!(args.kind, Kind::Sync));
+    }
+
+    #[test]
+    fn async_with_name() {
+        let args = parse_ok("async, name = \"x\"");
+        assert!(matches!(args.kind, Kind::Async));
+        assert_eq!(args.name.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn duplicate_name_is_error() {
+        let err = parse_err("name=\"a\", name=\"b\"");
+        assert!(
+            err.to_string().contains("duplicate"),
+            "unexpected message: {err}"
+        );
+    }
+
+    #[test]
+    fn unknown_arg_is_error_with_expected_list() {
+        let err = parse_err("bogus");
+        let msg = err.to_string();
+        assert!(msg.contains("unknown #[command] argument"), "msg: {msg}");
+        assert!(msg.contains("name = \"...\""), "msg: {msg}");
+    }
+
+    #[test]
+    fn empty_args_default_sync_no_name() {
+        let args = parse_ok("");
+        assert!(matches!(args.kind, Kind::Sync));
+        assert_eq!(args.name, None);
+    }
+}

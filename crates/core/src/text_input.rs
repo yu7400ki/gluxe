@@ -246,18 +246,11 @@ impl TextInputState {
     }
 
     fn previous_boundary(&self, offset: usize) -> usize {
-        self.content
-            .grapheme_indices(true)
-            .rev()
-            .find_map(|(idx, _)| (idx < offset).then_some(idx))
-            .unwrap_or(0)
+        previous_boundary(&self.content, offset)
     }
 
     fn next_boundary(&self, offset: usize) -> usize {
-        self.content
-            .grapheme_indices(true)
-            .find_map(|(idx, _)| (idx > offset).then_some(idx))
-            .unwrap_or(self.content.len())
+        next_boundary(&self.content, offset)
     }
 
     /// Start of the visual row containing `offset` (multiline). Falls back to 0.
@@ -533,29 +526,11 @@ impl TextInputState {
     // ---- UTF-16 conversion helpers (required by EntityInputHandler) -------
 
     fn offset_from_utf16(&self, offset: usize) -> usize {
-        let mut utf8_offset = 0;
-        let mut utf16_count = 0;
-        for ch in self.content.chars() {
-            if utf16_count >= offset {
-                break;
-            }
-            utf16_count += ch.len_utf16();
-            utf8_offset += ch.len_utf8();
-        }
-        utf8_offset
+        offset_from_utf16(&self.content, offset)
     }
 
     fn offset_to_utf16(&self, offset: usize) -> usize {
-        let mut utf16_offset = 0;
-        let mut utf8_count = 0;
-        for ch in self.content.chars() {
-            if utf8_count >= offset {
-                break;
-            }
-            utf8_count += ch.len_utf8();
-            utf16_offset += ch.len_utf16();
-        }
-        utf16_offset
+        offset_to_utf16(&self.content, offset)
     }
 
     fn range_to_utf16(&self, range: &Range<usize>) -> Range<usize> {
@@ -575,6 +550,55 @@ impl TextInputState {
 // into several visual rows. These helpers map between global byte offsets in
 // `content` and 2D positions relative to the content's top-left corner.
 // ---------------------------------------------------------------------------
+
+/// Byte offset of the grapheme cluster boundary immediately before `offset`.
+/// Returns 0 if `offset` is at (or before) the start of `content`.
+fn previous_boundary(content: &str, offset: usize) -> usize {
+    content
+        .grapheme_indices(true)
+        .rev()
+        .find_map(|(idx, _)| (idx < offset).then_some(idx))
+        .unwrap_or(0)
+}
+
+/// Byte offset of the grapheme cluster boundary immediately after `offset`.
+/// Returns `content.len()` if `offset` is at (or after) the end of `content`.
+fn next_boundary(content: &str, offset: usize) -> usize {
+    content
+        .grapheme_indices(true)
+        .find_map(|(idx, _)| (idx > offset).then_some(idx))
+        .unwrap_or(content.len())
+}
+
+/// Convert a UTF-16 code-unit offset into the equivalent UTF-8 byte offset
+/// within `content`.
+fn offset_from_utf16(content: &str, offset: usize) -> usize {
+    let mut utf8_offset = 0;
+    let mut utf16_count = 0;
+    for ch in content.chars() {
+        if utf16_count >= offset {
+            break;
+        }
+        utf16_count += ch.len_utf16();
+        utf8_offset += ch.len_utf8();
+    }
+    utf8_offset
+}
+
+/// Convert a UTF-8 byte offset into the equivalent UTF-16 code-unit offset
+/// within `content`.
+fn offset_to_utf16(content: &str, offset: usize) -> usize {
+    let mut utf16_offset = 0;
+    let mut utf8_count = 0;
+    for ch in content.chars() {
+        if utf8_count >= offset {
+            break;
+        }
+        utf8_count += ch.len_utf8();
+        utf16_offset += ch.len_utf16();
+    }
+    utf16_offset
+}
 
 /// (logical-line index, byte offset within that line) for a global byte offset.
 fn locate(lines: &[WrappedLine], offset: usize) -> (usize, usize) {
@@ -1430,5 +1454,115 @@ impl Element for TextElement {
                 input.last_line_height = line_height;
             });
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests for the pure text helpers (no GPUI window/font system required).
+//
+// The geometry helpers (`locate`, `position_for_offset`, …) operate on
+// `&[WrappedLine]`, which can only be produced by GPUI's text-shaping system,
+// so they are not unit-tested here.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::{next_boundary, offset_from_utf16, offset_to_utf16, previous_boundary};
+
+    // A man+woman+girl emoji joined by zero-width joiners: a single grapheme
+    // cluster spanning many bytes / chars.
+    const ZWJ_FAMILY: &str = "👨‍👩‍👧";
+    // "e" followed by a combining acute accent: a single grapheme cluster.
+    const COMBINING: &str = "e\u{301}";
+
+    #[test]
+    fn next_boundary_jumps_whole_zwj_cluster() {
+        // From the start, the next boundary is the end of the whole cluster.
+        assert_eq!(next_boundary(ZWJ_FAMILY, 0), ZWJ_FAMILY.len());
+        // Probing from inside the cluster still lands at its end, never mid-cluster.
+        for off in 1..ZWJ_FAMILY.len() {
+            assert_eq!(next_boundary(ZWJ_FAMILY, off), ZWJ_FAMILY.len());
+        }
+    }
+
+    #[test]
+    fn previous_boundary_jumps_whole_zwj_cluster() {
+        // From the end, the previous boundary is the start of the whole cluster.
+        assert_eq!(previous_boundary(ZWJ_FAMILY, ZWJ_FAMILY.len()), 0);
+        // Probing from inside the cluster still lands at its start, never mid-cluster.
+        for off in 1..ZWJ_FAMILY.len() {
+            assert_eq!(previous_boundary(ZWJ_FAMILY, off), 0);
+        }
+    }
+
+    #[test]
+    fn boundaries_jump_combining_mark_cluster() {
+        // "e" + combining acute = one cluster spanning the whole string.
+        assert_eq!(next_boundary(COMBINING, 0), COMBINING.len());
+        assert_eq!(previous_boundary(COMBINING, COMBINING.len()), 0);
+        // From inside (between the 'e' byte and the combining mark), don't split.
+        assert_eq!(next_boundary(COMBINING, 1), COMBINING.len());
+        assert_eq!(previous_boundary(COMBINING, 1), 0);
+    }
+
+    #[test]
+    fn previous_boundary_at_start_is_zero() {
+        // Backspace-at-start: nothing to delete.
+        assert_eq!(previous_boundary("hello", 0), 0);
+        assert_eq!(previous_boundary("", 0), 0);
+        assert_eq!(previous_boundary(ZWJ_FAMILY, 0), 0);
+    }
+
+    #[test]
+    fn next_boundary_at_end_is_len() {
+        // Delete-at-end: nothing to delete.
+        assert_eq!(next_boundary("hello", "hello".len()), "hello".len());
+        assert_eq!(next_boundary("", 0), 0);
+        assert_eq!(
+            next_boundary(ZWJ_FAMILY, ZWJ_FAMILY.len()),
+            ZWJ_FAMILY.len()
+        );
+    }
+
+    #[test]
+    fn boundaries_step_one_ascii_grapheme_at_a_time() {
+        let s = "abc";
+        assert_eq!(next_boundary(s, 0), 1);
+        assert_eq!(next_boundary(s, 1), 2);
+        assert_eq!(previous_boundary(s, 2), 1);
+        assert_eq!(previous_boundary(s, 1), 0);
+    }
+
+    #[test]
+    fn utf16_round_trip_at_char_boundaries() {
+        // BMP non-ASCII (1 UTF-16 unit), astral emoji (2 UTF-16 units), ASCII.
+        let s = "aé😀b"; // 'a', 'é' (U+00E9), '😀' (U+1F600), 'b'
+        // Collect the UTF-8 byte offsets at each char boundary (incl. end).
+        let mut byte_offsets = vec![0usize];
+        for (idx, ch) in s.char_indices() {
+            byte_offsets.push(idx + ch.len_utf8());
+        }
+        for &o in &byte_offsets {
+            let utf16 = offset_to_utf16(s, o);
+            assert_eq!(
+                offset_from_utf16(s, utf16),
+                o,
+                "round-trip failed at byte offset {o}"
+            );
+        }
+    }
+
+    #[test]
+    fn utf16_offsets_count_astral_as_two_units() {
+        let s = "a😀b";
+        // After 'a' (1 byte): 1 UTF-16 unit.
+        assert_eq!(offset_to_utf16(s, 1), 1);
+        // After 'a' + '😀' (1 + 4 bytes): 1 + 2 = 3 UTF-16 units.
+        assert_eq!(offset_to_utf16(s, 1 + 4), 3);
+        // The whole string: 1 + 2 + 1 = 4 UTF-16 units.
+        assert_eq!(offset_to_utf16(s, s.len()), 4);
+        // Inverse direction.
+        assert_eq!(offset_from_utf16(s, 1), 1);
+        assert_eq!(offset_from_utf16(s, 3), 1 + 4);
+        assert_eq!(offset_from_utf16(s, 4), s.len());
     }
 }

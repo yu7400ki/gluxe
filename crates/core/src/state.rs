@@ -748,6 +748,15 @@ pub(crate) fn run_boa_jobs() {
     });
 }
 
+/// Decide whether [`arm_next_timer`] should (re-)arm a background timer for `due`.
+///
+/// Returns `false` (skip arming) only when a timer is already `in_flight`, an
+/// armed deadline exists, and `due` is at or after it — i.e. a live timer already
+/// covers this deadline. When nothing is in flight, it always re-arms.
+fn should_rearm<T: PartialOrd>(in_flight: bool, due: T, armed: Option<T>) -> bool {
+    !(in_flight && matches!(armed, Some(a) if due >= a))
+}
+
 /// Arm a GPUI background timer to wake the pump when the next JS timer comes due.
 ///
 /// [`GpuiJobExecutor`] parks not-yet-due clock jobs instead of busy-waiting.
@@ -782,13 +791,10 @@ pub(crate) fn arm_next_timer() {
     };
 
     let in_flight = FIRED_GEN.load(Ordering::Relaxed) < ARMED_GEN.load(Ordering::Relaxed);
-    if in_flight {
-        if let Some(armed) = ARMED_DEADLINE.with(|a| a.get()) {
-            if due >= armed {
-                // A live timer covers this deadline; its wake will re-arm if needed.
-                return;
-            }
-        }
+    let armed = ARMED_DEADLINE.with(|a| a.get());
+    if !should_rearm(in_flight, due, armed) {
+        // A live timer covers this deadline; its wake will re-arm if needed.
+        return;
     }
 
     let executor = BG_EXECUTOR.with(|e| e.borrow().clone());
@@ -1284,5 +1290,34 @@ mod tests {
         let v = parse_envelope(&encode_stream_message(&StreamMessage::Error("boom".into())));
         assert_eq!(v["t"], serde_json::json!("error"));
         assert_eq!(v["error"], serde_json::json!("boom"));
+    }
+
+    // ---- should_rearm ----
+
+    #[test]
+    fn should_rearm_when_not_in_flight() {
+        // Not in flight: always re-arm, regardless of the armed deadline.
+        assert!(should_rearm(false, 5u64, None));
+        assert!(should_rearm(false, 5u64, Some(1)));
+        assert!(should_rearm(false, 5u64, Some(10)));
+    }
+
+    #[test]
+    fn should_not_rearm_when_in_flight_and_due_at_or_after_armed() {
+        // A live timer already covers this deadline → skip arming.
+        assert!(!should_rearm(true, 10u64, Some(5))); // due > armed
+        assert!(!should_rearm(true, 5u64, Some(5))); // due == armed (>=)
+    }
+
+    #[test]
+    fn should_rearm_when_in_flight_but_due_before_armed() {
+        // An earlier deadline appeared; the in-flight timer won't cover it → re-arm.
+        assert!(should_rearm(true, 3u64, Some(5)));
+    }
+
+    #[test]
+    fn should_rearm_when_in_flight_but_no_armed_deadline() {
+        // In flight but nothing recorded as armed → re-arm.
+        assert!(should_rearm(true, 7u64, None::<u64>));
     }
 }

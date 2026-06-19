@@ -890,3 +890,91 @@ fn local_image_path(src: &str) -> PathBuf {
     }
     PathBuf::from(src)
 }
+
+// ---------------------------------------------------------------------------
+// Tests for the pure positioning / path helpers (no GPUI window required).
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use gpui::{Anchor, point, px};
+
+    use super::{floating_corners, local_image_path, side_offset};
+    use crate::model::{FloatingAlign, FloatingSide};
+
+    #[test]
+    fn floating_corners_all_combinations() {
+        use Anchor::{
+            BottomCenter, BottomLeft, BottomRight, LeftCenter, RightCenter, TopCenter, TopLeft,
+            TopRight,
+        };
+        use FloatingAlign::{Center, End, Start};
+        use FloatingSide::{Bottom, Left, Right, Top};
+
+        // Characterization: exactly mirrors the current match arms.
+        assert_eq!(floating_corners(Bottom, Start), (BottomLeft, TopLeft));
+        assert_eq!(floating_corners(Bottom, Center), (BottomCenter, TopCenter));
+        assert_eq!(floating_corners(Bottom, End), (BottomRight, TopRight));
+        assert_eq!(floating_corners(Top, Start), (TopLeft, BottomLeft));
+        assert_eq!(floating_corners(Top, Center), (TopCenter, BottomCenter));
+        assert_eq!(floating_corners(Top, End), (TopRight, BottomRight));
+        assert_eq!(floating_corners(Right, Start), (TopRight, TopLeft));
+        assert_eq!(floating_corners(Right, Center), (RightCenter, LeftCenter));
+        assert_eq!(floating_corners(Right, End), (BottomRight, BottomLeft));
+        assert_eq!(floating_corners(Left, Start), (TopLeft, TopRight));
+        assert_eq!(floating_corners(Left, Center), (LeftCenter, RightCenter));
+        assert_eq!(floating_corners(Left, End), (BottomLeft, BottomRight));
+    }
+
+    #[test]
+    fn side_offset_axis_and_sign() {
+        let off = px(8.0);
+        // Top pushes up (negative y); Bottom pushes down (positive y).
+        assert_eq!(side_offset(FloatingSide::Top, off), point(px(0.0), -off));
+        assert_eq!(side_offset(FloatingSide::Bottom, off), point(px(0.0), off));
+        // Left pushes left (negative x); Right pushes right (positive x).
+        assert_eq!(side_offset(FloatingSide::Left, off), point(-off, px(0.0)));
+        assert_eq!(side_offset(FloatingSide::Right, off), point(off, px(0.0)));
+    }
+
+    #[test]
+    fn local_image_path_bare_path_passes_through() {
+        assert_eq!(
+            local_image_path("images/logo.png"),
+            PathBuf::from("images/logo.png")
+        );
+        assert_eq!(
+            local_image_path("/abs/path/to/logo.png"),
+            PathBuf::from("/abs/path/to/logo.png")
+        );
+    }
+
+    #[test]
+    fn local_image_path_file_url_unix() {
+        // A well-formed `file://` URL with an absolute path is parsed to that path.
+        assert_eq!(
+            local_image_path("file:///tmp/logo.png"),
+            PathBuf::from("/tmp/logo.png")
+        );
+    }
+
+    #[test]
+    fn local_image_path_file_url_windows_drive() {
+        // A Windows-style `file:///C:/...` URL parses to a drive path via
+        // `Url::to_file_path` on Windows. On other platforms `to_file_path`
+        // refuses it, so the fallback strips the `file://` prefix verbatim.
+        let got = local_image_path("file:///C:/images/logo.png");
+        #[cfg(windows)]
+        assert_eq!(got, PathBuf::from(r"C:\images\logo.png"));
+        #[cfg(not(windows))]
+        assert_eq!(got, PathBuf::from("/C:/images/logo.png"));
+    }
+
+    #[test]
+    fn local_image_path_unparseable_file_url_strips_prefix() {
+        // An empty-host `file://` URL has no path `url` can turn into a file path,
+        // so the fallback strips the literal `file://` prefix.
+        assert_eq!(local_image_path("file://"), PathBuf::from(""));
+    }
+}

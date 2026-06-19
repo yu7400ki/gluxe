@@ -211,3 +211,74 @@ fn read_file_stream(path: String, mut sink: StreamSink) {
     }
     sink.end();
 }
+
+// ---------------------------------------------------------------------------
+// Tests for the pure helpers.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::path::PathBuf;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use serde_json::Value;
+
+    use super::{strip_verbatim, system_time_ms};
+
+    #[test]
+    fn system_time_ms_known_time_to_millis() {
+        // 1234 ms after the epoch → numeric 1234.
+        let t = UNIX_EPOCH + Duration::from_millis(1234);
+        assert_eq!(system_time_ms(Ok(t)), Value::Number(1234i64.into()));
+    }
+
+    #[test]
+    fn system_time_ms_epoch_is_zero() {
+        assert_eq!(system_time_ms(Ok(UNIX_EPOCH)), Value::Number(0i64.into()));
+    }
+
+    #[test]
+    fn system_time_ms_before_epoch_is_null() {
+        // A time predating the epoch makes `duration_since` return Err → null.
+        let before = UNIX_EPOCH - Duration::from_millis(1);
+        assert_eq!(system_time_ms(Ok(before)), Value::Null);
+    }
+
+    #[test]
+    fn system_time_ms_err_is_null() {
+        let err: io::Result<SystemTime> = Err(io::Error::other("no time"));
+        assert_eq!(system_time_ms(err), Value::Null);
+    }
+
+    #[test]
+    fn strip_verbatim_plain_path_unchanged() {
+        // A path without a verbatim prefix passes through on every platform.
+        let p = PathBuf::from("relative/path");
+        assert_eq!(strip_verbatim(p), "relative/path");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_verbatim_removes_extended_length_prefix() {
+        assert_eq!(
+            strip_verbatim(PathBuf::from(r"\\?\C:\foo\bar")),
+            r"C:\foo\bar"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_verbatim_rewrites_unc_prefix() {
+        assert_eq!(
+            strip_verbatim(PathBuf::from(r"\\?\UNC\server\share\file")),
+            r"\\server\share\file"
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn strip_verbatim_is_noop_on_non_windows() {
+        // On non-Windows, the `\\?\` text is not special — it passes through verbatim.
+        assert_eq!(strip_verbatim(PathBuf::from(r"\\?\C:\foo")), r"\\?\C:\foo");
+    }
+}
