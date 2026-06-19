@@ -28,10 +28,12 @@ use crate::{
     style::apply_style_props,
 };
 
+mod edit;
 mod geometry;
 
 // Pure offset/position/run helpers live in `geometry.rs`; glob-import so the
 // controller and element below call them by bare name (unchanged call sites).
+use edit::{extend_selection, splice_content};
 use geometry::*;
 
 // ---------------------------------------------------------------------------
@@ -206,15 +208,8 @@ impl TextInputState {
 
     fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         let offset = offset.min(self.content.len());
-        if self.selection_reversed {
-            self.selected_range.start = offset;
-        } else {
-            self.selected_range.end = offset;
-        }
-        if self.selected_range.end < self.selected_range.start {
-            self.selection_reversed = !self.selection_reversed;
-            self.selected_range = self.selected_range.end..self.selected_range.start;
-        }
+        (self.selected_range, self.selection_reversed) =
+            extend_selection(self.selected_range.clone(), self.selection_reversed, offset);
         self.autoscroll = true;
         cx.notify();
     }
@@ -603,8 +598,7 @@ impl EntityInputHandler for TextInputState {
             .or_else(|| self.marked_range.clone())
             .unwrap_or_else(|| self.selected_range.clone());
 
-        self.content =
-            (self.content[..range.start].to_owned() + new_text + &self.content[range.end..]).into();
+        self.content = splice_content(&self.content, &range, new_text).into();
         self.selected_range = range.start + new_text.len()..range.start + new_text.len();
         self.marked_range.take();
         self.notify_change(cx);
@@ -624,8 +618,7 @@ impl EntityInputHandler for TextInputState {
             .or_else(|| self.marked_range.clone())
             .unwrap_or_else(|| self.selected_range.clone());
 
-        self.content =
-            (self.content[..range.start].to_owned() + new_text + &self.content[range.end..]).into();
+        self.content = splice_content(&self.content, &range, new_text).into();
         if !new_text.is_empty() {
             self.marked_range = Some(range.start..range.start + new_text.len());
         } else {
