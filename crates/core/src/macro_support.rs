@@ -2,8 +2,6 @@
 // `gluxe::__macro` module. Only the generated code and the `commands!` helper
 // reference these items; they are not a stable public surface.
 
-use std::sync::Arc;
-
 use serde::{Serialize, de::DeserializeOwned};
 
 pub use serde_json::Value;
@@ -28,7 +26,7 @@ impl CommandSpec {
     pub fn sync(name: &'static str, f: fn(Value) -> CommandResult) -> Self {
         Self {
             name,
-            command: Command::Sync(Box::new(f)),
+            command: Command::sync(f),
         }
     }
 
@@ -36,7 +34,7 @@ impl CommandSpec {
     pub fn async_(name: &'static str, f: fn(Value) -> CommandResult) -> Self {
         Self {
             name,
-            command: Command::Async(Arc::new(f)),
+            command: Command::async_(f),
         }
     }
 
@@ -44,7 +42,7 @@ impl CommandSpec {
     pub fn stream(name: &'static str, f: fn(Value, StreamSink)) -> Self {
         Self {
             name,
-            command: Command::Stream(Arc::new(f)),
+            command: Command::stream(f),
         }
     }
 }

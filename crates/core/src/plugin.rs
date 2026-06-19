@@ -64,6 +64,26 @@ pub(crate) enum Command {
     Stream(StreamCommandHandler),
 }
 
+// The sole constructors of the `Command` variants — the `Box`/`Arc` wrapping
+// lives here only, so `PluginBuilder` (closures) and `CommandSpec` (macro `fn`
+// pointers) share one source instead of each repeating the wrapping.
+impl Command {
+    /// Wrap a synchronous handler (boxed; runs inline on the Boa thread).
+    pub(crate) fn sync(handler: impl Fn(Value) -> CommandResult + 'static) -> Self {
+        Self::Sync(Box::new(handler))
+    }
+
+    /// Wrap an async handler (`Arc`'d so it can be cloned onto a background thread).
+    pub(crate) fn async_(handler: impl Fn(Value) -> CommandResult + Send + Sync + 'static) -> Self {
+        Self::Async(Arc::new(handler))
+    }
+
+    /// Wrap a streaming handler (`Arc`'d so it can be cloned onto a background thread).
+    pub(crate) fn stream(handler: impl Fn(Value, StreamSink) + Send + Sync + 'static) -> Self {
+        Self::Stream(Arc::new(handler))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Streaming
 // ---------------------------------------------------------------------------
@@ -215,8 +235,7 @@ impl PluginBuilder {
         name: impl Into<String>,
         handler: impl Fn(Value) -> CommandResult + 'static,
     ) -> Self {
-        self.commands
-            .insert(name.into(), Command::Sync(Box::new(handler)));
+        self.commands.insert(name.into(), Command::sync(handler));
         self
     }
 
@@ -228,8 +247,7 @@ impl PluginBuilder {
         name: impl Into<String>,
         handler: impl Fn(Value) -> CommandResult + Send + Sync + 'static,
     ) -> Self {
-        self.commands
-            .insert(name.into(), Command::Async(Arc::new(handler)));
+        self.commands.insert(name.into(), Command::async_(handler));
         self
     }
 
@@ -243,8 +261,7 @@ impl PluginBuilder {
         name: impl Into<String>,
         handler: impl Fn(Value, StreamSink) + Send + Sync + 'static,
     ) -> Self {
-        self.commands
-            .insert(name.into(), Command::Stream(Arc::new(handler)));
+        self.commands.insert(name.into(), Command::stream(handler));
         self
     }
 
