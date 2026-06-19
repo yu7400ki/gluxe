@@ -141,6 +141,14 @@ export interface DialogOverlayProps extends Omit<ViewProps, "children"> {
  * Apply a `backgroundColor` to dim the page. Positioned `absolute, inset: 0`
  * (override via `style`). Omit it for a non-modal dialog.
  *
+ * **This is also the background scroll guard — no separate scroll lock exists.**
+ * Being `position: absolute` it occludes (GPUI `BlockMouse`), which makes every
+ * hitbox behind it report `should_handle_scroll() == false`, so wheel/pointer
+ * scrolling never reaches the page underneath; keyboard scrolling is blocked
+ * separately by {@link DialogContent}'s focus trap. Setting `occlude={false}` on
+ * this overlay (or omitting the overlay) removes that guard and lets the
+ * background scroll again — intended only for non-modal dialogs.
+ *
  * Must be rendered inside `<Dialog>`.
  */
 export function DialogOverlay(props: DialogOverlayProps): React.ReactElement | null {
