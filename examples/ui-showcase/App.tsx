@@ -12,6 +12,7 @@ import type React from "react";
 import { AccordionSection } from "./components/sections/accordion-section";
 import { ButtonSection } from "./components/sections/button-section";
 import { CheckboxSection } from "./components/sections/checkbox-section";
+import { DialogSection } from "./components/sections/dialog-section";
 import { DisclosureSection } from "./components/sections/disclosure-section";
 import { RadioGroupSection } from "./components/sections/radio-group-section";
 import { ScrollAreaSection } from "./components/sections/scroll-area-section";
@@ -70,6 +71,7 @@ export default function App(): React.ReactElement {
           <SwitchSection />
           <RadioGroupSection />
           <SelectSection />
+          <DialogSection />
           <DisclosureSection />
           <AccordionSection />
           <TabsSection />
