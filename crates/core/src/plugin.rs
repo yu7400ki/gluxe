@@ -397,7 +397,7 @@ pub(crate) fn dispatch_command(key: &str, args: Value) -> Dispatched {
             Some(Command::Sync(handler)) => Dispatched::Ready(handler(args)),
             Some(Command::Async(handler)) => Dispatched::Spawn(handler.clone(), args),
             Some(Command::Stream(handler)) => Dispatched::SpawnStream(handler.clone(), args),
-            None => Dispatched::Ready(Err(format!("unknown command: {key}"))),
+            None => Dispatched::Ready(Err(format!("{key}: unknown command"))),
         }
     })
 }
@@ -423,13 +423,16 @@ enum FlavourMismatch {
 
 /// The JS-facing error string for a flavour mismatch — the single source for the
 /// wording, shared by both dispatch adapters (and their tests).
+///
+/// All command errors follow the `"{key}: <reason>"` convention (matching the
+/// unknown-command and built-in `__window`/`__focus` argument errors).
 fn format_flavour_mismatch(key: &str, mismatch: FlavourMismatch) -> String {
     match mismatch {
         FlavourMismatch::InvokeHitStream => {
-            format!("'{key}' is a stream command — use invokeStream")
+            format!("{key}: stream command — use invokeStream")
         }
-        FlavourMismatch::StreamHitSync => format!("'{key}' is not a stream command"),
-        FlavourMismatch::StreamHitAsync => format!("'{key}' is an async (non-stream) command"),
+        FlavourMismatch::StreamHitSync => format!("{key}: not a stream command"),
+        FlavourMismatch::StreamHitAsync => format!("{key}: async (non-stream) command"),
     }
 }
 
