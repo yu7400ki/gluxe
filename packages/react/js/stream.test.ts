@@ -169,13 +169,9 @@ describe("GluxeStream", () => {
 
     it("error is surfaced once via the pull() err field, then cleared", async () => {
       const stream = new GluxeStream<string>(0);
-      // Pre-set queue is empty; set error state manually (done=true so _error won't work;
-      // test via __streamPush path with a real streamId below, or test the pull path directly).
-      // Use a fresh stream and error it, then read twice.
-      const stream2 = new GluxeStream<string>(0);
-      stream2._error(new Error("once"));
+      stream._error(new Error("once"));
 
-      const reader = stream2.getReader();
+      const reader = stream.getReader();
       // First read should reject.
       await expect(reader.read()).rejects.toThrow("once");
       // Second read: done is true, so it resolves as done (not rejects again).
@@ -309,7 +305,7 @@ describe("invokeStream() via __streamPush", () => {
   });
 
   it("a late __streamPush to a terminated stream id is a safe no-op", () => {
-    const stream = invokeStream<string>("test|cmd");
+    invokeStream<string>("test|cmd");
     const [streamId] = mockInvokeStream.mock.calls[0] as [number];
 
     pushEnd(streamId);
