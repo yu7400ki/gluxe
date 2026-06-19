@@ -497,6 +497,13 @@ export interface BaseStyleProps {
    * @example `{ liga: false, ss01: true, cv01: 1 }`
    */
   fontFeatures?: Record<string, boolean | number>;
+  /** `<TextInput>` caret colour. Defaults to the text `color`. Ignored on other elements. */
+  caretColor?: Color;
+  /** `<TextInput>` caret width (px/rem only; `%`/`auto` ignored). Defaults to `1px`. */
+  caretWidth?: AbsoluteUnit;
+  /** `<TextInput>` selection-highlight colour. Use a translucent colour so text
+   *  stays legible. Defaults to a translucent blue. Ignored on other elements. */
+  selectionColor?: Color;
 }
 
 export interface StyleProps extends BaseStyleProps {

@@ -267,6 +267,13 @@ pub(crate) struct StyleFields {
     pub(crate) text_background_color: Option<Rgba>,
     /// OpenType font features: `Vec<(tag, value)>` where value 1 = on, 0 = off.
     pub(crate) font_features: Option<Vec<(String, u32)>>,
+    // ---- TextInput caret / selection (read by text_input.rs; not applied to a div) ----
+    /// Caret colour. `None` → falls back to the text `color`.
+    pub(crate) caret_color: Option<Rgba>,
+    /// Caret width (px/rem only; `%`/`auto` ignored). `None` → 1px default.
+    pub(crate) caret_width: Option<LengthValue>,
+    /// Selection-highlight background colour. `None` → built-in translucent blue.
+    pub(crate) selection_color: Option<Rgba>,
     // ---- Grid ----
     /// Number of equal-width columns (`repeat(N, minmax(0, 1fr))`).
     /// GPUI only supports uniform tracks; arbitrary track lists are unavailable.

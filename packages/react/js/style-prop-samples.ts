@@ -105,4 +105,7 @@ export const STYLE_PROP_SAMPLES = {
   textDecorationThickness: 2,
   textBackgroundColor: "#ffff00",
   fontFeatures: { liga: false },
+  caretColor: "#3d5a80",
+  caretWidth: 2,
+  selectionColor: "rgba(61,90,128,0.25)",
 } satisfies Required<BaseStyleProps>;

@@ -117,6 +117,7 @@ fn apply_simple_field(fields: &mut StyleFields, key: &str, value: &JsValue) {
         "borderBottomLeftRadius" => set!(border_bottom_left_radius, length_from_value(value)),
         "scrollbarWidth" => set!(scrollbar_width, length_from_value(value)),
         "textDecorationThickness" => set!(text_decoration_thickness, length_from_value(value)),
+        "caretWidth" => set!(caret_width, length_from_value(value)),
         // ---- Numbers ----
         "flexGrow" => set!(flex_grow, f32_of(value)),
         "flexShrink" => set!(flex_shrink, f32_of(value)),
@@ -156,6 +157,8 @@ fn apply_simple_field(fields: &mut StyleFields, key: &str, value: &JsValue) {
         "borderColor" => set!(border_color, color_of(value)),
         "textDecorationColor" => set!(text_decoration_color, color_of(value)),
         "textBackgroundColor" => set!(text_background_color, color_of(value)),
+        "caretColor" => set!(caret_color, color_of(value)),
+        "selectionColor" => set!(selection_color, color_of(value)),
         // Unknown / non-style / composite keys: ignored here.
         _ => {}
     }

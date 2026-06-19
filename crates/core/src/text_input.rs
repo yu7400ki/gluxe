@@ -13,13 +13,13 @@ use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, ElementId as GpuiElementId,
     ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, GlobalElementId,
     LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
-    ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window, actions, div,
-    fill, point, prelude::*, px, relative, rgba,
+    Rgba, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window,
+    actions, div, fill, point, prelude::*, px, relative, rgba,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    model::ElementId,
+    model::{ElementId, LengthValue},
     state::{dispatch_value_event, with_tree},
     style::apply_style_props,
 };
@@ -64,6 +64,13 @@ pub(crate) struct TextInputState {
     /// Placeholder shown when content is empty.
     placeholder: SharedString,
 
+    /// Caret colour, mirrored from `style.caretColor` each render. `None` → text color.
+    caret_color: Option<Rgba>,
+    /// Caret width, mirrored from `style.caretWidth` each render. `None` → 1px.
+    caret_width: Option<LengthValue>,
+    /// Selection-highlight colour, mirrored from `style.selectionColor`. `None` → default.
+    selection_color: Option<Rgba>,
+
     /// Byte-indexed selection within `content` (UTF-8 offsets).
     selected_range: Range<usize>,
     selection_reversed: bool,
@@ -106,6 +113,9 @@ impl TextInputState {
             focus_handle,
             content,
             placeholder: initial_placeholder.unwrap_or_default().into(),
+            caret_color: None,
+            caret_width: None,
+            selection_color: None,
             selected_range: cursor..cursor,
             selection_reversed: false,
             marked_range: None,
@@ -493,21 +503,38 @@ impl Render for TextInputState {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Read style/value/placeholder from the tree. Build the styled div inside the
         // borrow so `StyleFields` is applied by reference rather than cloned each frame.
-        let (ext_value, ext_placeholder, tab_index, tab_stop, base) =
-            with_tree(|tree| match tree.nodes.get(&self.element_id) {
-                Some(e) => (
-                    e.props.value.clone(),
-                    e.props.placeholder.clone(),
-                    e.props.tab_index,
-                    // A bare <TextInput> is keyboard-reachable by default; `tabStop`
-                    // overrides, and `tabIndex < 0` opts out of the Tab order.
-                    e.props
-                        .tab_stop
-                        .unwrap_or_else(|| e.props.tab_index.map_or(true, |i| i >= 0)),
-                    apply_style_props(div(), &e.props.style),
-                ),
-                None => (None, None, None, true, div()),
-            });
+        let (
+            ext_value,
+            ext_placeholder,
+            tab_index,
+            tab_stop,
+            caret_color,
+            caret_width,
+            selection_color,
+            base,
+        ) = with_tree(|tree| match tree.nodes.get(&self.element_id) {
+            Some(e) => (
+                e.props.value.clone(),
+                e.props.placeholder.clone(),
+                e.props.tab_index,
+                // A bare <TextInput> is keyboard-reachable by default; `tabStop`
+                // overrides, and `tabIndex < 0` opts out of the Tab order.
+                e.props
+                    .tab_stop
+                    .unwrap_or_else(|| e.props.tab_index.map_or(true, |i| i >= 0)),
+                e.props.style.caret_color,
+                e.props.style.caret_width,
+                e.props.style.selection_color,
+                apply_style_props(div(), &e.props.style),
+            ),
+            None => (None, None, None, true, None, None, None, div()),
+        });
+
+        // Mirror caret/selection styles onto the entity so `TextElement::prepaint`
+        // (which has `&App`, not the tree) can read them.
+        self.caret_color = caret_color;
+        self.caret_width = caret_width;
+        self.selection_color = selection_color;
 
         // Controlled-value sync: adopt external changes but ignore our own echo.
         // Skip while an IME composition is active: the external `value` lags by
@@ -621,6 +648,9 @@ impl Element for TextElement {
         let content = input.content.clone();
         let selected_range = input.selected_range.clone();
         let cursor = input.cursor_offset();
+        let caret_color = input.caret_color;
+        let caret_width = input.caret_width;
+        let selection_color = input.selection_color;
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
@@ -675,6 +705,15 @@ impl Element for TextElement {
             .text_system()
             .shape_line(display_text, font_size, &runs, None);
 
+        // Caret width: px/rem only (`%`/`auto` → None), defaulting to 1px.
+        let caret_w = caret_width
+            .and_then(|l| l.to_absolute())
+            .map(|a| a.to_pixels(window.rem_size()))
+            .unwrap_or(px(1.));
+        // Caret colour defaults to the text colour; selection to a translucent blue.
+        let caret_fill: Rgba = caret_color.unwrap_or_else(|| style.color.into());
+        let selection_fill: Rgba = selection_color.unwrap_or(rgba(0x3311ff30));
+
         let cursor_pos = line.x_for_index(cursor);
         let (selection, cursor_quad) = if selected_range.is_empty() {
             (
@@ -682,9 +721,9 @@ impl Element for TextElement {
                 Some(fill(
                     Bounds::new(
                         point(bounds.left() + cursor_pos, bounds.top()),
-                        gpui::size(px(2.), bounds.bottom() - bounds.top()),
+                        gpui::size(caret_w, bounds.bottom() - bounds.top()),
                     ),
-                    gpui::blue(),
+                    caret_fill,
                 )),
             )
         } else {
@@ -700,7 +739,7 @@ impl Element for TextElement {
                             bounds.bottom(),
                         ),
                     ),
-                    rgba(0x3311ff30),
+                    selection_fill,
                 )),
                 None,
             )
