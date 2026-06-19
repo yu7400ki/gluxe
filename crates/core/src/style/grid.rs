@@ -13,10 +13,10 @@ pub(super) fn parse_grid_line_token(s: &str) -> Option<GridPlacement> {
     }
     let lower = s.to_ascii_lowercase();
     if let Some(rest) = lower.strip_prefix("span") {
-        if let Ok(n) = rest.trim().parse::<u16>() {
-            if n > 0 {
-                return Some(GridPlacement::Span(n));
-            }
+        if let Ok(n) = rest.trim().parse::<u16>()
+            && n > 0
+        {
+            return Some(GridPlacement::Span(n));
         }
         return None;
     }

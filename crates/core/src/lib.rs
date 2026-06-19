@@ -489,10 +489,8 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                     // Advance style transitions once per GPUI frame. Placed after
                     // the flush so a transition started this pass renders its t=0
                     // frame from the dirty mark `apply_command` already produced.
-                    if frame_fired {
-                        if let Some(now) = clock_now_ms() {
-                            outcome.dirty_nodes.extend(anim::tick(now));
-                        }
+                    if frame_fired && let Some(now) = clock_now_ms() {
+                        outcome.dirty_nodes.extend(anim::tick(now));
                     }
                     if !outcome.is_empty() {
                         let _ = root.update(cx, |root_view, _, cx| {

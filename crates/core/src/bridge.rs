@@ -27,10 +27,8 @@ fn props_from_args(args: &[JsValue], ctx: &mut JsContext, capture_raw: bool) -> 
         .as_ref()
         .map(|obj| parse_props(obj, ctx))
         .unwrap_or_default();
-    if capture_raw {
-        if let Some(v) = args.get(1) {
-            props.raw = Some(js_to_json(v, ctx));
-        }
+    if capture_raw && let Some(v) = args.get(1) {
+        props.raw = Some(js_to_json(v, ctx));
     }
     // Third argument: event-type string array (e.g. ["click", "mousedown"]);
     // absent when no handlers are registered.
@@ -63,7 +61,7 @@ fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
         let type_str = string_arg(args, 0, ctx)?;
         let kind = ElementKind::from_type_name(&type_str, component::is_registered);
         let capture_raw = kind.is_native();
-        let props = props_from_args(&args, ctx, capture_raw);
+        let props = props_from_args(args, ctx, capture_raw);
         let id = next_id();
         push_cmd(UICommand::CreateInstance { id, kind, props });
         Ok(JsValue::from(id as f64))
@@ -129,7 +127,7 @@ fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
         let type_str = string_arg_or(args, 3, ctx, "");
         let capture_raw =
             ElementKind::from_type_name(&type_str, component::is_registered).is_native();
-        let props = props_from_args(&args, ctx, capture_raw);
+        let props = props_from_args(args, ctx, capture_raw);
         push_cmd(UICommand::UpdateProps { id, props });
         Ok(JsValue::undefined())
     });

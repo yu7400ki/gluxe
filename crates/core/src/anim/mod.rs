@@ -262,9 +262,10 @@ mod tests {
     }
 
     fn style_with_width(width: f32) -> StyleFields {
-        let mut s = StyleFields::default();
-        s.width = Some(LengthValue::Px(width));
-        s
+        StyleFields {
+            width: Some(LengthValue::Px(width)),
+            ..Default::default()
+        }
     }
 
     fn current_width(id: ElementId) -> Option<LengthValue> {

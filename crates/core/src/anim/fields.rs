@@ -193,9 +193,11 @@ mod tests {
 
     #[test]
     fn diff_detects_changed_fields_only() {
-        let mut old = StyleFields::default();
-        old.width = Some(LengthValue::Px(10.0));
-        old.opacity = Some(1.0);
+        let old = StyleFields {
+            width: Some(LengthValue::Px(10.0)),
+            opacity: Some(1.0),
+            ..Default::default()
+        };
         let mut new = old.clone();
         new.width = Some(LengthValue::Px(20.0));
         new.background_color = Some(Rgba {

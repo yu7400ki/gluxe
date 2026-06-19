@@ -51,10 +51,10 @@ pub(crate) enum WindowCommand {
 thread_local! {
     /// Never reset on hot reload — title changes issued during old-bundle unmount
     /// still apply to the still-open window.
-    static WINDOW_COMMANDS: RefCell<Vec<WindowCommand>> = RefCell::new(Vec::new());
+    static WINDOW_COMMANDS: RefCell<Vec<WindowCommand>> = const { RefCell::new(Vec::new()) };
     /// Programmatic `focus()` requests whose handle isn't painted yet, with a
     /// remaining retry budget. Retried one-per-frame until resolved or exhausted.
-    static PENDING_FOCUS: RefCell<Vec<(ElementId, u8)>> = RefCell::new(Vec::new());
+    static PENDING_FOCUS: RefCell<Vec<(ElementId, u8)>> = const { RefCell::new(Vec::new()) };
     /// Element Tab navigation should resume from when focus falls to nothing / the root.
     static FOCUS_ANCHOR: Cell<Option<ElementId>> = const { Cell::new(None) };
     /// Element holding keyboard focus as of the last paint (any kind: View/Image/
@@ -169,10 +169,10 @@ pub(crate) fn take_window_commands() -> Vec<WindowCommand> {
 // `reset_for_reload` (dev-mode hot reload).
 thread_local! {
     static ID_COUNTER: Cell<u64> = const { Cell::new(1) };
-    static COMMAND_QUEUE: RefCell<VecDeque<UICommand>> = RefCell::new(VecDeque::new());
+    static COMMAND_QUEUE: RefCell<VecDeque<UICommand>> = const { RefCell::new(VecDeque::new()) };
     static TREE: RefCell<Tree> = RefCell::new(Tree::default());
     // Live Boa context — held here so the foreground pump can call run_jobs().
-    static BOA: RefCell<Option<JsContext>> = RefCell::new(None);
+    static BOA: RefCell<Option<JsContext>> = const { RefCell::new(None) };
     // ScrollHandle/Entity/FocusHandle are Rc-backed (!Send), so thread_local is
     // the correct home. Handles survive re-renders to preserve scroll position,
     // caret/IME state, and keyboard focus across frames.
@@ -265,12 +265,11 @@ pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
             }
             // Start/replace/cancel style transitions before `apply_command`
             // swaps the props in (it needs the old style to diff against).
-            if let UICommand::UpdateProps { id, props } = &cmd {
-                if let Some(old) = tree.nodes.get(id) {
-                    if old.props != *props {
-                        crate::anim::on_props_update(*id, &old.props.style, props, now_ms);
-                    }
-                }
+            if let UICommand::UpdateProps { id, props } = &cmd
+                && let Some(old) = tree.nodes.get(id)
+                && old.props != *props
+            {
+                crate::anim::on_props_update(*id, &old.props.style, props, now_ms);
             }
             outcome.merge(apply_command(&mut tree, cmd));
         }
@@ -645,10 +644,10 @@ fn call_global(js: &mut JsContext, name: &str, args: &[JsValue]) {
     let Ok(callable) = global.get(JsString::from(name), js) else {
         return;
     };
-    if let Some(func) = callable.as_callable() {
-        if let Err(err) = func.call(&JsValue::undefined(), args, js) {
-            log_js_error(name, &err);
-        }
+    if let Some(func) = callable.as_callable()
+        && let Err(err) = func.call(&JsValue::undefined(), args, js)
+    {
+        log_js_error(name, &err);
     }
 }
 
@@ -850,10 +849,10 @@ pub(crate) fn mark_autofocus(id: ElementId) -> bool {
 /// Convenience wrapper used in the `RootView::render` pre-pass for `autoFocus`
 /// elements. Guarded by `mark_autofocus` so focus is stolen at most once.
 pub(crate) fn try_autofocus(id: ElementId, window: &mut Window, cx: &mut App) {
-    if mark_autofocus(id) {
-        if let Some(handle) = get_focus_handle(id, cx) {
-            window.focus(&handle, cx);
-        }
+    if mark_autofocus(id)
+        && let Some(handle) = get_focus_handle(id, cx)
+    {
+        window.focus(&handle, cx);
     }
 }
 

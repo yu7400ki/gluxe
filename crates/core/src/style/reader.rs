@@ -54,7 +54,7 @@ fn get_font_weight(obj: &JsObject, ctx: &mut JsContext) -> Option<f32> {
 fn get_line_height(obj: &JsObject, ctx: &mut JsContext) -> Option<DefiniteLength> {
     let val = obj.get(js_string!("lineHeight"), ctx).ok()?;
     if let Some(n) = val.as_number() {
-        return Some(relative(n as f32).into());
+        return Some(relative(n as f32));
     }
     if let Some(s) = val.as_string().and_then(|s| s.to_std_string().ok()) {
         let s = s.trim();
@@ -65,14 +65,10 @@ fn get_line_height(obj: &JsObject, ctx: &mut JsContext) -> Option<DefiniteLength
             return p.trim().parse::<f32>().ok().map(|n| rems(n).into());
         }
         if let Some(p) = s.strip_suffix('%') {
-            return p
-                .trim()
-                .parse::<f32>()
-                .ok()
-                .map(|n| relative(n / 100.0).into());
+            return p.trim().parse::<f32>().ok().map(|n| relative(n / 100.0));
         }
         if let Ok(n) = s.parse::<f32>() {
-            return Some(relative(n).into());
+            return Some(relative(n));
         }
     }
     None
@@ -100,10 +96,11 @@ fn get_font_features(obj: &JsObject, ctx: &mut JsContext) -> Option<Vec<(String,
             .unwrap_or_default();
         if let Some(b) = val.as_boolean() {
             result.push((tag, if b { 1 } else { 0 }));
-        } else if let Some(n) = val.as_number() {
-            if n >= 0.0 && n.fract() == 0.0 {
-                result.push((tag, n as u32));
-            }
+        } else if let Some(n) = val.as_number()
+            && n >= 0.0
+            && n.fract() == 0.0
+        {
+            result.push((tag, n as u32));
         }
     }
 

@@ -20,7 +20,7 @@ const BUNDLE_MANIFEST_FILE: &str = "gluxe.manifest.json";
 ///
 /// Call this as the sole line of your `build.rs`:
 /// ```rust,no_run
-/// fn main() { gluxe_build::configure(); }
+/// gluxe_build::configure();
 /// ```
 pub fn configure() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
@@ -78,7 +78,7 @@ struct BuildConfig {
     icon: Option<PathBuf>,
 }
 
-fn read_build_config(manifest_dir: &PathBuf) -> BuildConfig {
+fn read_build_config(manifest_dir: &Path) -> BuildConfig {
     let path = manifest_dir.join("app.json");
     let default = BuildConfig {
         bundle_out_dir: PathBuf::from("dist"),

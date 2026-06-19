@@ -365,23 +365,29 @@ mod tests {
 
     #[test]
     fn scrolls_true_when_overflow_x_scroll() {
-        let mut s = StyleFields::default();
-        s.overflow_x = Some(OverflowMode::Scroll);
+        let s = StyleFields {
+            overflow_x: Some(OverflowMode::Scroll),
+            ..Default::default()
+        };
         assert!(s.scrolls());
     }
 
     #[test]
     fn scrolls_true_when_overflow_y_scroll() {
-        let mut s = StyleFields::default();
-        s.overflow_y = Some(OverflowMode::Scroll);
+        let s = StyleFields {
+            overflow_y: Some(OverflowMode::Scroll),
+            ..Default::default()
+        };
         assert!(s.scrolls());
     }
 
     #[test]
     fn scrolls_false_when_hidden() {
-        let mut s = StyleFields::default();
-        s.overflow_x = Some(OverflowMode::Hidden);
-        s.overflow_y = Some(OverflowMode::Hidden);
+        let s = StyleFields {
+            overflow_x: Some(OverflowMode::Hidden),
+            overflow_y: Some(OverflowMode::Hidden),
+            ..Default::default()
+        };
         assert!(!s.scrolls());
     }
 

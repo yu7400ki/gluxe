@@ -421,12 +421,12 @@ impl TextInputState {
             // Enter inserts a newline; submit is bound to Cmd/Ctrl+Enter.
             self.replace_text_in_range(None, "\n", window, cx);
         } else {
-            dispatch_value_event(self.element_id, "submit", &self.content.to_string());
+            dispatch_value_event(self.element_id, "submit", self.content.as_ref());
         }
     }
 
     fn submit(&mut self, _: &Submit, _: &mut Window, _cx: &mut Context<Self>) {
-        dispatch_value_event(self.element_id, "submit", &self.content.to_string());
+        dispatch_value_event(self.element_id, "submit", self.content.as_ref());
     }
 
     fn show_character_palette(
@@ -774,15 +774,14 @@ impl Render for TextInputState {
         // `marked_range` pointing into the wrong content — this underflows the
         // run-splitting in `prepaint` and crashes. Composition owns the content
         // until it commits (marked_range → None).
-        if self.marked_range.is_none() {
-            if let Some(v) = ext_value {
-                if v != self.last_sent {
-                    self.content = v.clone().into();
-                    self.selected_range = self.content.len()..self.content.len();
-                    self.last_sent = v;
-                    self.autoscroll = true;
-                }
-            }
+        if self.marked_range.is_none()
+            && let Some(v) = ext_value
+            && v != self.last_sent
+        {
+            self.content = v.clone().into();
+            self.selected_range = self.content.len()..self.content.len();
+            self.last_sent = v;
+            self.autoscroll = true;
         }
         if let Some(p) = ext_placeholder {
             self.placeholder = p.into();
@@ -1177,10 +1176,8 @@ impl Element for TextElement {
             )
             .unwrap();
 
-            if is_focused {
-                if let Some(cursor) = prepaint.cursor.take() {
-                    window.paint_quad(cursor);
-                }
+            if is_focused && let Some(cursor) = prepaint.cursor.take() {
+                window.paint_quad(cursor);
             }
 
             self.input.update(cx, |input, _cx| {
@@ -1213,10 +1210,8 @@ impl Element for TextElement {
                     .unwrap();
                     y += line_height * (line.wrap_boundaries().len() + 1) as f32;
                 }
-                if is_focused {
-                    if let Some(cursor) = cursor_quad {
-                        window.paint_quad(cursor);
-                    }
+                if is_focused && let Some(cursor) = cursor_quad {
+                    window.paint_quad(cursor);
                 }
             });
 

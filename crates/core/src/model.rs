@@ -85,7 +85,7 @@ impl Props {
     pub(crate) fn resolve_tab_stop(&self, is_text_input: bool) -> bool {
         self.tab_stop.unwrap_or_else(|| {
             if is_text_input {
-                self.tab_index.map_or(true, |i| i >= 0)
+                self.tab_index.is_none_or(|i| i >= 0)
             } else {
                 self.tab_index.is_some_and(|i| i >= 0)
             }
@@ -612,8 +612,10 @@ mod tests {
 
     #[test]
     fn events_any_true_when_one_set() {
-        let mut e = Events::default();
-        e.click = true;
+        let e = Events {
+            click: true,
+            ..Default::default()
+        };
         assert!(e.any());
     }
 
@@ -640,15 +642,17 @@ mod tests {
 
     #[test]
     fn is_overlay_true_for_floating() {
-        let mut props = Props::default();
-        props.floating = Some(FloatingSpec {
-            anchor: "a".to_string(),
-            side: FloatingSide::Bottom,
-            align: FloatingAlign::Start,
-            offset: LengthValue::Px(0.0),
-            margin: LengthValue::Px(0.0),
-            priority: None,
-        });
+        let props = Props {
+            floating: Some(FloatingSpec {
+                anchor: "a".to_string(),
+                side: FloatingSide::Bottom,
+                align: FloatingAlign::Start,
+                offset: LengthValue::Px(0.0),
+                margin: LengthValue::Px(0.0),
+                priority: None,
+            }),
+            ..Default::default()
+        };
         assert!(props.is_overlay());
     }
 
@@ -666,8 +670,10 @@ mod tests {
     #[test]
     fn should_occlude_explicit_true_on_in_flow_node() {
         // An in-flow element can be forced to occlude (e.g. a dialog panel).
-        let mut props = Props::default();
-        props.occlude = Some(true);
+        let props = Props {
+            occlude: Some(true),
+            ..Default::default()
+        };
         assert!(props.should_occlude());
     }
 
@@ -710,8 +716,10 @@ mod tests {
     }
 
     fn make_tabbable_instance(id: ElementId, tab_index: Option<i32>) -> UICommand {
-        let mut props = Props::default();
-        props.tab_index = tab_index;
+        let props = Props {
+            tab_index,
+            ..Default::default()
+        };
         UICommand::CreateInstance {
             id,
             kind: ElementKind::View,
@@ -779,14 +787,15 @@ mod tests {
         let mut tree = Tree::default();
         apply_command(&mut tree, make_tabbable_instance(1, Some(-1)));
         // tabIndex < 0 takes the TextInput out of the Tab order.
-        let mut hidden = Props::default();
-        hidden.tab_index = Some(-1);
         apply_command(
             &mut tree,
             UICommand::CreateInstance {
                 id: 2,
                 kind: ElementKind::TextInput,
-                props: hidden,
+                props: Props {
+                    tab_index: Some(-1),
+                    ..Default::default()
+                },
             },
         );
         apply_command(
@@ -818,8 +827,10 @@ mod tests {
     fn collect_tab_stops_skips_hidden_subtrees() {
         for hide in ["display", "visibility"] {
             let mut tree = Tree::default();
-            let mut props = Props::default();
-            props.tab_index = Some(0); // the container is itself a stop...
+            let mut props = Props {
+                tab_index: Some(0),
+                ..Default::default()
+            }; // the container is itself a stop...
             if hide == "display" {
                 props.style.display = Some("none".to_string());
             } else {
@@ -885,14 +896,14 @@ mod tests {
         let mut tree = Tree::default();
         apply_command(&mut tree, make_keydown_instance(3, false));
         assert!(tree.focusable_ids.contains_key(&3));
-        assert_eq!(tree.focusable_ids[&3], false);
+        assert!(!tree.focusable_ids[&3]);
     }
 
     #[test]
     fn create_autofocus_node_registers_with_true_flag() {
         let mut tree = Tree::default();
         apply_command(&mut tree, make_keydown_instance(4, true));
-        assert_eq!(tree.focusable_ids[&4], true);
+        assert!(tree.focusable_ids[&4]);
     }
 
     // ---- apply_command — CreateText / UpdateText ----

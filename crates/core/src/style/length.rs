@@ -43,7 +43,7 @@ impl LengthValue {
         match self {
             LengthValue::Px(n) => Some(px(n).into()),
             LengthValue::Rem(n) => Some(rems(n).into()),
-            LengthValue::Percent(p) => Some(relative(p / 100.0).into()),
+            LengthValue::Percent(p) => Some(relative(p / 100.0)),
             LengthValue::Auto => None,
         }
     }

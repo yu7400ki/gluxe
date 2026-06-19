@@ -31,10 +31,10 @@ thread_local! {
         RefCell::new(FxHashMap::default());
     /// Whether a left-button press started inside a `WindowControlArea::Drag` region
     /// (non-Windows). Set on mouse-down, cleared when drag starts or button releases.
-    static DRAG_SHOULD_MOVE: Cell<bool> = Cell::new(false);
+    static DRAG_SHOULD_MOVE: Cell<bool> = const { Cell::new(false) };
     /// Set when `start_window_move()` is actually called; prevents a drag-initiated
     /// click from also triggering the double-click zoom action.
-    static WINDOW_MOVE_STARTED: Cell<bool> = Cell::new(false);
+    static WINDOW_MOVE_STARTED: Cell<bool> = const { Cell::new(false) };
     /// `onFocus`/`onBlur` subscriptions per element. Rebuilt when the handler set
     /// changes; dropped on `DetachDeleted` / dev reload.
     static FOCUS_SUBSCRIPTIONS: RefCell<FxHashMap<ElementId, FocusSubs>> =
@@ -522,10 +522,10 @@ impl Render for NodeView {
                     if let Some(v) = element.props.style.height {
                         image = image.h(v.to_length());
                     }
-                    if let Some(v) = element.props.style.border_radius {
-                        if let Some(a) = v.to_absolute() {
-                            image = image.rounded(a);
-                        }
+                    if let Some(v) = element.props.style.border_radius
+                        && let Some(a) = v.to_absolute()
+                    {
+                        image = image.rounded(a);
                     }
                     // Occluding images block the mouse behind them (see `Props::should_occlude`).
                     if element.props.should_occlude() {
@@ -638,10 +638,10 @@ impl RootView {
         };
         let current =
             crate::state::active_element_id(window, cx).or_else(crate::state::focus_anchor);
-        if let Some(target) = crate::state::scope_tab_target(&order, current, prev) {
-            if let Some(handle) = crate::state::get_focus_handle(target, cx) {
-                window.focus(&handle, cx);
-            }
+        if let Some(target) = crate::state::scope_tab_target(&order, current, prev)
+            && let Some(handle) = crate::state::get_focus_handle(target, cx)
+        {
+            window.focus(&handle, cx);
         }
     }
 
@@ -660,7 +660,7 @@ impl RootView {
                 notify_text_input_entity(id, cx);
             }
             if let Some(entity) = get_node_view_entity(id) {
-                let _ = entity.update(cx, |_, cx| cx.notify());
+                entity.update(cx, |_, cx| cx.notify());
             } else {
                 root_dirty = true;
             }
@@ -717,10 +717,10 @@ impl Render for RootView {
 /// Falls back to a raw strip of the prefix if parsing fails; bare paths pass through.
 fn local_image_path(src: &str) -> PathBuf {
     if src.starts_with("file://") {
-        if let Ok(url) = Url::parse(src) {
-            if let Ok(path) = url.to_file_path() {
-                return path;
-            }
+        if let Ok(url) = Url::parse(src)
+            && let Ok(path) = url.to_file_path()
+        {
+            return path;
         }
         // Malformed `file://` that `url` refused to parse: strip and treat as path.
         return PathBuf::from(src.trim_start_matches("file://"));

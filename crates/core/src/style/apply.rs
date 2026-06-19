@@ -70,55 +70,55 @@ pub(crate) fn apply_style_props<T: Styled>(mut element: T, props: &StyleFields) 
         element = element.h(v.to_length());
     }
     // Padding / gap / margin: uniform → per-axis → per-side (most specific wins).
-    if let Some(v) = props.padding {
-        if let Some(d) = v.to_definite() {
-            element = element.p(d);
-        }
+    if let Some(v) = props.padding
+        && let Some(d) = v.to_definite()
+    {
+        element = element.p(d);
     }
-    if let Some(v) = props.padding_x {
-        if let Some(d) = v.to_definite() {
-            element = element.px(d);
-        }
+    if let Some(v) = props.padding_x
+        && let Some(d) = v.to_definite()
+    {
+        element = element.px(d);
     }
-    if let Some(v) = props.padding_y {
-        if let Some(d) = v.to_definite() {
-            element = element.py(d);
-        }
+    if let Some(v) = props.padding_y
+        && let Some(d) = v.to_definite()
+    {
+        element = element.py(d);
     }
-    if let Some(v) = props.padding_top {
-        if let Some(d) = v.to_definite() {
-            element = element.pt(d);
-        }
+    if let Some(v) = props.padding_top
+        && let Some(d) = v.to_definite()
+    {
+        element = element.pt(d);
     }
-    if let Some(v) = props.padding_right {
-        if let Some(d) = v.to_definite() {
-            element = element.pr(d);
-        }
+    if let Some(v) = props.padding_right
+        && let Some(d) = v.to_definite()
+    {
+        element = element.pr(d);
     }
-    if let Some(v) = props.padding_bottom {
-        if let Some(d) = v.to_definite() {
-            element = element.pb(d);
-        }
+    if let Some(v) = props.padding_bottom
+        && let Some(d) = v.to_definite()
+    {
+        element = element.pb(d);
     }
-    if let Some(v) = props.padding_left {
-        if let Some(d) = v.to_definite() {
-            element = element.pl(d);
-        }
+    if let Some(v) = props.padding_left
+        && let Some(d) = v.to_definite()
+    {
+        element = element.pl(d);
     }
-    if let Some(v) = props.gap {
-        if let Some(d) = v.to_definite() {
-            element = element.gap(d);
-        }
+    if let Some(v) = props.gap
+        && let Some(d) = v.to_definite()
+    {
+        element = element.gap(d);
     }
-    if let Some(v) = props.gap_x {
-        if let Some(d) = v.to_definite() {
-            element = element.gap_x(d);
-        }
+    if let Some(v) = props.gap_x
+        && let Some(d) = v.to_definite()
+    {
+        element = element.gap_x(d);
     }
-    if let Some(v) = props.gap_y {
-        if let Some(d) = v.to_definite() {
-            element = element.gap_y(d);
-        }
+    if let Some(v) = props.gap_y
+        && let Some(d) = v.to_definite()
+    {
+        element = element.gap_y(d);
     }
     if let Some(n) = props.grid_template_columns {
         element = element.grid_cols(n);
@@ -188,18 +188,18 @@ pub(crate) fn apply_style_props<T: Styled>(mut element: T, props: &StyleFields) 
     if let Some(background_color) = props.background_color {
         element = element.bg(background_color);
     }
-    if let Some(v) = props.border_radius {
-        if let Some(a) = v.to_absolute() {
-            element = element.rounded(a);
-        }
+    if let Some(v) = props.border_radius
+        && let Some(a) = v.to_absolute()
+    {
+        element = element.rounded(a);
     }
     if let Some(color) = props.color {
         element = element.text_color(color);
     }
-    if let Some(v) = props.font_size {
-        if let Some(a) = v.to_absolute() {
-            element = element.text_size(a);
-        }
+    if let Some(v) = props.font_size
+        && let Some(a) = v.to_absolute()
+    {
+        element = element.text_size(a);
     }
     if let Some(w) = props.font_weight {
         element = element.font_weight(FontWeight(w));
@@ -208,15 +208,15 @@ pub(crate) fn apply_style_props<T: Styled>(mut element: T, props: &StyleFields) 
     if let Some(c) = props.border_color {
         element = element.border_color(c);
     }
-    if let Some(v) = props.border_width {
-        if let Some(a) = v.to_absolute() {
-            element.style().border_widths = EdgesRefinement {
-                top: Some(a),
-                left: Some(a),
-                right: Some(a),
-                bottom: Some(a),
-            };
-        }
+    if let Some(v) = props.border_width
+        && let Some(a) = v.to_absolute()
+    {
+        element.style().border_widths = EdgesRefinement {
+            top: Some(a),
+            left: Some(a),
+            right: Some(a),
+            bottom: Some(a),
+        };
     }
     match props.cursor.as_deref() {
         Some("pointer") => element = element.cursor_pointer(),
