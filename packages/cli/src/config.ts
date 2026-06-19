@@ -58,13 +58,13 @@ function parseCommandSpec(
 
 export async function readBundleBuildConfig(project: string): Promise<BundleBuildConfig> {
   const json = await readAppJson(project);
-  const build = getRecord(getRecord(json.bundle).build);
+  const build = getIn(json, "bundle", "build");
   return parseCommandSpec(build, project, defaultBundleBuildConfig(project));
 }
 
 export async function readBundleOutDir(project: string): Promise<string> {
   const json = await readAppJson(project);
-  const outDir = getRecord(json.bundle).outDir;
+  const outDir = getIn(json, "bundle").outDir;
   return typeof outDir === "string" ? outDir : "dist";
 }
 
@@ -84,12 +84,21 @@ export function defaultDevBuildConfig(project: string): BundleBuildConfig {
 // keeps running and rewrites dist/ (manifest + entry) on every change.
 export async function readDevBuildConfig(project: string): Promise<BundleBuildConfig> {
   const json = await readAppJson(project);
-  const build = getRecord(getRecord(json.dev).build);
+  const build = getIn(json, "dev", "build");
   return parseCommandSpec(build, project, defaultDevBuildConfig(project));
 }
 
 export function getRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+/** Walk a chain of object keys, treating any non-object link as `{}`. Returns
+ *  the record at the path's end, so a leaf value is read off the result. */
+function getIn(value: unknown, ...keys: string[]): Record<string, unknown> {
+  return keys.reduce<Record<string, unknown>>(
+    (record, key) => getRecord(record[key]),
+    getRecord(value),
+  );
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
