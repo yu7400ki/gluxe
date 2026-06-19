@@ -80,6 +80,25 @@ export type {
   TabsTriggerState,
 } from "./tabs/tabs";
 
+// ---- Dialog ----
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogOverlay,
+  DialogPositioner,
+  DialogTrigger,
+} from "./dialog/dialog";
+export type {
+  DialogCloseProps,
+  DialogContentProps,
+  DialogOverlayProps,
+  DialogPositionerProps,
+  DialogProps,
+  DialogState,
+  DialogTriggerProps,
+} from "./dialog/dialog";
+
 // ---- Select ----
 export {
   Select,
