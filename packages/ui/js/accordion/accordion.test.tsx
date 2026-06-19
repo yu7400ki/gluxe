@@ -268,4 +268,65 @@ describe("Accordion — keyboard / focus", () => {
     keydown("header-a", "enter");
     expect(container.textContent).not.toContain("content-a");
   });
+
+  // Three headers so arrow navigation order (registration = mount = visual) is
+  // exercised; `disabledValue` optionally disables one.
+  function ThreeAccordion({ disabledValue }: { disabledValue?: string }) {
+    return (
+      <Accordion type="multiple">
+        {["a", "b", "c"].map((v) => (
+          <Accordion.Item key={v} value={v} disabled={v === disabledValue}>
+            <Accordion.Trigger>
+              <Text>{`header-${v}`}</Text>
+            </Accordion.Trigger>
+            <Accordion.Content>
+              <Text>{`content-${v}`}</Text>
+            </Accordion.Content>
+          </Accordion.Item>
+        ))}
+      </Accordion>
+    );
+  }
+
+  it("Up / Down move focus to the previous / next header (in visual order)", () => {
+    render(<ThreeAccordion />);
+    keydown("header-a", "down");
+    expect(document.activeElement?.textContent).toBe("header-b");
+    keydown("header-b", "down");
+    expect(document.activeElement?.textContent).toBe("header-c");
+    keydown("header-c", "up");
+    expect(document.activeElement?.textContent).toBe("header-b");
+  });
+
+  it("Home / End move focus to the first / last header", () => {
+    render(<ThreeAccordion />);
+    keydown("header-b", "end");
+    expect(document.activeElement?.textContent).toBe("header-c");
+    keydown("header-c", "home");
+    expect(document.activeElement?.textContent).toBe("header-a");
+  });
+
+  it("stops at the ends (loop=false, no wrap)", () => {
+    render(<ThreeAccordion />);
+    keydown("header-a", "end"); // → last
+    expect(document.activeElement?.textContent).toBe("header-c");
+    keydown("header-c", "down"); // already last: no wrap, stays
+    expect(document.activeElement?.textContent).toBe("header-c");
+    keydown("header-c", "home"); // → first
+    expect(document.activeElement?.textContent).toBe("header-a");
+    keydown("header-a", "up"); // already first: no wrap, stays
+    expect(document.activeElement?.textContent).toBe("header-a");
+  });
+
+  it("arrow navigation skips a disabled header", () => {
+    render(<ThreeAccordion disabledValue="b" />);
+    keydown("header-a", "down"); // skips disabled b
+    expect(document.activeElement?.textContent).toBe("header-c");
+  });
+
+  it("every trigger stays a Tab stop with three headers (additive, not roving)", () => {
+    render(<ThreeAccordion />);
+    const tabbable = [...container.querySelectorAll("[tabindex]")];
+    expect(tabbable.map((el) => el.getAttribute("tabindex"))).toEqual(["0", "0", "0"]);
+  });
 });

@@ -1,7 +1,7 @@
 import type { GpuiInstance, GpuiKeyboardEvent } from "@gluxe/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-// Keyboard navigation over a registry of items, in two flavours that share a
+// Keyboard navigation over a registry of items, in three flavours that share a
 // registry and the arrow/Home/End math:
 //   - Roving tabindex (`useRovingFocus`): the group exposes a single Tab stop
 //     and arrows move it between items. Used by RadioGroup (selection follows
@@ -9,6 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 //   - List navigation (`useListNavigation`): the Tab stop is external (a Select
 //     trigger); arrows move a "highlight" over the open option list, with
 //     explicit selection. Used by Select.
+//   - Focus-group navigation (`useFocusGroupNavigation`): every item stays a Tab
+//     stop (no roving tabindex); arrows / Home / End only MOVE focus between
+//     items. Used by Accordion (the ARIA APG "all headers tabbable" pattern,
+//     with arrow keys as an additive convenience).
 // Focus management is possible via the `tabIndex` / `ref.focus()` host APIs in
 // @gluxe/react.
 
@@ -447,5 +451,85 @@ export function useListItem(
     ref,
     onFocus: () => list.setHighlighted(value),
     onKeyDown: (e) => list.onItemKeyDown(value, e),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Focus-group navigation (Accordion): every item keeps its own Tab stop; arrow
+// keys / Home / End only move focus, never touching tabindex or selection.
+// ---------------------------------------------------------------------------
+
+/**
+ * Arrow / Home / End focus movement over a group whose items are *all* Tab stops
+ * (the ARIA APG Accordion pattern). Unlike {@link useRovingFocus} it never
+ * manages `tabIndex` and holds no React state — it only routes a key from the
+ * focused item to the next/prev/first/last enabled item's `focus()`.
+ */
+export interface FocusGroupNavigation {
+  /** Register an item; returns an unregister cleanup. Stable identity. */
+  register: (item: RovingItem) => () => void;
+  /** Handle an arrow / Home / End key dispatched from the item with `value`. */
+  onItemKeyDown: (value: string, e: GpuiKeyboardEvent) => void;
+}
+
+/**
+ * Focus-only group navigation, over the shared item registry. No `tabIndex`
+ * management and no state: items stay Tab stops and arrows merely move focus.
+ *
+ * Navigation follows registration (mount) order, like the other flavours — fine
+ * for the static lists these components target; an item mounted later registers
+ * at the end, so a dynamically inserted header navigates from there.
+ */
+export function useFocusGroupNavigation({
+  orientation,
+  loop,
+}: {
+  orientation: Orientation;
+  loop: boolean;
+}): FocusGroupNavigation {
+  const { register, items } = useItemRegistry();
+
+  const onItemKeyDown = useCallback(
+    (value: string, e: GpuiKeyboardEvent) => {
+      const next = nextItemForKey(items.current, value, e.key, orientation, loop);
+      if (next) next.focus();
+    },
+    [items, orientation, loop],
+  );
+
+  return useMemo(() => ({ register, onItemKeyDown }), [register, onItemKeyDown]);
+}
+
+/**
+ * Register a focus-group item from inside an item component. Mirrors
+ * {@link useListItem} minus the highlight channel: no `tabIndex` and no
+ * `onFocus` — the item keeps whatever `tabIndex` it already has, and the only
+ * wiring is registration plus an `onKeyDown` for arrow navigation.
+ *
+ * @returns a ref for the item's host element and an `onKeyDown` for arrow nav.
+ */
+export function useFocusGroupItem(
+  group: FocusGroupNavigation,
+  value: string,
+  disabled: boolean,
+): {
+  ref: React.RefObject<GpuiInstance | null>;
+  onKeyDown: (e: GpuiKeyboardEvent) => void;
+} {
+  const ref = useRef<GpuiInstance | null>(null);
+  const itemRef = useRef<RovingItem>({
+    value,
+    disabled,
+    focus: () => ref.current?.focus(),
+  });
+  itemRef.current.value = value;
+  itemRef.current.disabled = disabled;
+
+  const { register } = group;
+  useEffect(() => register(itemRef.current), [register]);
+
+  return {
+    ref,
+    onKeyDown: (e) => group.onItemKeyDown(value, e),
   };
 }

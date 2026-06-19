@@ -1,10 +1,21 @@
-import { type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
+import {
+  type GpuiKeyboardEvent,
+  type GpuiMouseEvent,
+  View,
+  type ViewProps,
+} from "@gluxe/react";
 import React, { useCallback, useMemo } from "react";
 
 import { Button } from "../button/button";
 import { composeEventHandlers } from "../internal/compose";
 import { createSafeContext } from "../internal/context";
 import { useControllableState } from "../internal/controllable-state";
+import { mergeRefs } from "../internal/merge-refs";
+import {
+  type FocusGroupNavigation,
+  useFocusGroupItem,
+  useFocusGroupNavigation,
+} from "../internal/roving-focus";
 import { renderSlot, type Slot } from "../internal/slot";
 
 // ---------------------------------------------------------------------------
@@ -18,6 +29,8 @@ interface AccordionContextValue {
   toggle: (itemValue: string) => void;
   /** When true every item's trigger is inert. */
   disabled: boolean;
+  /** Arrow / Home / End focus movement between headers (all stay Tab stops). */
+  focusGroup: FocusGroupNavigation;
 }
 
 const [AccordionContextProvider, useAccordionContext] =
@@ -188,9 +201,12 @@ export function Accordion(props: AccordionProps): React.ReactElement {
   const { isOpen, toggle } = props.type === "single" ? single : multiple;
 
   const disabled = props.disabled ?? false;
+  // Accordion headers are all Tab stops (ARIA APG); arrows only move focus among
+  // them (vertical, no wrap), so this never touches tabindex or selection.
+  const focusGroup = useFocusGroupNavigation({ orientation: "vertical", loop: false });
   const ctx = useMemo<AccordionContextValue>(
-    () => ({ isOpen, toggle, disabled }),
-    [isOpen, toggle, disabled],
+    () => ({ isOpen, toggle, disabled, focusGroup }),
+    [isOpen, toggle, disabled, focusGroup],
   );
 
   return (
@@ -254,22 +270,33 @@ export interface AccordionTriggerProps extends Omit<ViewProps, "children"> {
  * focused control's click handler); does nothing when the item or accordion is
  * disabled. Each header is focusable via Tab (`tabIndex={0}`); a disabled header
  * leaves the Tab order.
+ *
+ * Up / Down move focus to the previous / next enabled header and Home / End to
+ * the first / last (the ARIA APG additive arrow-key convenience). This only
+ * moves focus — every header stays a Tab stop and toggling stays on Enter /
+ * Space / click.
  */
 export function AccordionTrigger({
   children,
   onClick,
+  onKeyDown,
+  ref,
   ...viewProps
 }: AccordionTriggerProps): React.ReactElement {
   const accordionCtx = useAccordionContext();
   const itemState = useAccordionItemContext();
+  const item = useFocusGroupItem(accordionCtx.focusGroup, itemState.value, itemState.disabled);
 
   return (
     <Button
       {...viewProps}
+      ref={mergeRefs(ref, item.ref)}
       disabled={itemState.disabled}
       onClick={composeEventHandlers<GpuiMouseEvent>(onClick, () =>
         accordionCtx.toggle(itemState.value),
       )}
+      // Arrow / Home / End only move focus (never toggle); consumer onKeyDown runs first.
+      onKeyDown={composeEventHandlers<GpuiKeyboardEvent>(onKeyDown, item.onKeyDown)}
     >
       {renderSlot(children, itemState)}
     </Button>
