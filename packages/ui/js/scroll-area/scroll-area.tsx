@@ -55,12 +55,18 @@ export interface ScrollAreaViewportProps extends ViewProps {}
  * the runtime tracks vertical scroll; override via `style` for other axes (e.g.
  * a horizontal-only area sets `overflowX: "scroll", overflowY: "hidden"`).
  *
+ * Focusable by default (`tabIndex={0}`) so keyboard users can scroll it with
+ * Arrow/Page/Home/End/Space (the runtime binds these to the viewport's scroll
+ * offset). Pass `tabIndex={-1}` to keep it scrollable but out of the Tab order,
+ * or any explicit `tabIndex` to override.
+ *
  * Registers its host id with the {@link ScrollArea} so sibling scrollbars can
  * track it; clears it on unmount.
  */
 export function ScrollAreaViewport({
   style,
   ref,
+  tabIndex = 0,
   ...viewProps
 }: ScrollAreaViewportProps): React.ReactElement {
   const { setViewportId } = useScrollAreaContext();
@@ -82,6 +88,7 @@ export function ScrollAreaViewport({
   return (
     <View
       {...viewProps}
+      tabIndex={tabIndex}
       ref={mergeRefs(ref, setViewportRef)}
       style={{ overflowY: "scroll", ...style }}
     />

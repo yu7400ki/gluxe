@@ -233,4 +233,23 @@ describe("ScrollArea", () => {
       ),
     ).toThrow("This component must be rendered inside <ScrollArea>.");
   });
+
+  it("the Viewport is focusable by default (tabIndex 0) and the consumer can override it", () => {
+    function Demo({ tabIndex }: { tabIndex?: number }) {
+      return (
+        <ScrollArea>
+          <ScrollArea.Viewport tabIndex={tabIndex}>
+            <Text>content</Text>
+          </ScrollArea.Viewport>
+        </ScrollArea>
+      );
+    }
+    // Default: the Viewport joins the Tab order so keyboard users can scroll it.
+    render(<Demo />);
+    expect(container.querySelector("view[tabindex]")?.getAttribute("tabindex")).toBe("0");
+
+    // Override: tabIndex={-1} keeps it scrollable but out of the Tab order.
+    render(<Demo tabIndex={-1} />);
+    expect(container.querySelector("view[tabindex]")?.getAttribute("tabindex")).toBe("-1");
+  });
 });
