@@ -7,25 +7,16 @@ import {
   View,
   type ViewProps,
 } from "@gluxe/react";
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { Button } from "../button/button";
 import { composeEventHandlers } from "../internal/compose";
 import { createSafeContext } from "../internal/context";
 import { useControllableState } from "../internal/controllable-state";
 import { mergeRefs } from "../internal/merge-refs";
-import { arrowDirection, nextEnabledIndex } from "../internal/roving-focus";
+import { type ListNavigation, useListItem, useListNavigation } from "../internal/roving-focus";
 import { renderSlot, type Slot } from "../internal/slot";
 import { Portal } from "../portal/portal";
-
-// A single registered option, kept live by mutating the shared record so the
-// open listbox's keyboard navigation always sees current `value`/`disabled`.
-interface ItemRecord {
-  value: string;
-  disabled: boolean;
-  /** Move keyboard focus to this option's element. */
-  focus: () => void;
-}
 
 /** State the Select root (and {@link SelectTrigger}) expose to render children. */
 export interface SelectState {
@@ -50,15 +41,8 @@ interface SelectContextValue {
   closeAndFocusTrigger: () => void;
   /** Select a value, then close and return focus to the trigger. */
   select: (value: string) => void;
-  /** Register an option for keyboard navigation; returns an unregister cleanup. */
-  registerItem: (item: ItemRecord) => () => void;
-  /** Live list of registered options, in mount (source) order. */
-  items: React.RefObject<ItemRecord[]>;
-  /** The highlighted (focused) option's value while the dropdown is open. */
-  highlighted: string | undefined;
-  setHighlighted: (value: string | undefined) => void;
-  /** Handle an arrow / Home / End / Escape key dispatched from the option `value`. */
-  onItemKeyDown: (value: string, e: GpuiKeyboardEvent) => void;
+  /** Keyboard navigation + highlight channel for the open option list. */
+  list: ListNavigation;
 }
 
 const [SelectContextProvider, useSelectContext] = createSafeContext<SelectContextValue>("Select");
@@ -151,26 +135,13 @@ export function Select({
   const anchorName = `gluxe-select-${reactId}`;
 
   const triggerRef = useRef<GpuiInstance | null>(null);
-  const itemsRef = useRef<ItemRecord[]>([]);
-
-  const [highlighted, setHighlightedState] = useState<string | undefined>(undefined);
-  const highlightedRef = useRef<string | undefined>(undefined);
-  const setHighlighted = useCallback((v: string | undefined) => {
-    highlightedRef.current = v;
-    setHighlightedState(v);
-  }, []);
+  const list = useListNavigation({ loop });
 
   // Reset the highlight once the list is closed so the next open starts clean.
+  const { setHighlighted } = list;
   useEffect(() => {
     if (!open) setHighlighted(undefined);
   }, [open, setHighlighted]);
-
-  const registerItem = useCallback((item: ItemRecord) => {
-    itemsRef.current.push(item);
-    return () => {
-      itemsRef.current = itemsRef.current.filter((i) => i !== item);
-    };
-  }, []);
 
   const openMenu = useCallback(() => setOpen(true), [setOpen]);
 
@@ -188,31 +159,6 @@ export function Select({
     [setValue, setOpen],
   );
 
-  const onItemKeyDown = useCallback(
-    (fromValue: string, e: GpuiKeyboardEvent) => {
-      if (e.key === "escape") {
-        closeAndFocusTrigger();
-        return;
-      }
-      const dir = arrowDirection(e.key, "vertical");
-      if (dir === null) return;
-      const items = itemsRef.current;
-      const from = items.findIndex((i) => i.value === fromValue);
-      if (from < 0) return;
-
-      let target: number | null;
-      if (dir === "first") target = nextEnabledIndex(items, -1, 1, false);
-      else if (dir === "last") target = nextEnabledIndex(items, items.length, -1, false);
-      else target = nextEnabledIndex(items, from, dir, loop);
-      if (target === null) return;
-
-      const next = items[target];
-      setHighlighted(next.value);
-      next.focus();
-    },
-    [loop, closeAndFocusTrigger, setHighlighted],
-  );
-
   const context = useMemo<SelectContextValue>(
     () => ({
       value,
@@ -223,25 +169,9 @@ export function Select({
       openMenu,
       closeAndFocusTrigger,
       select,
-      registerItem,
-      items: itemsRef,
-      highlighted,
-      setHighlighted,
-      onItemKeyDown,
+      list,
     }),
-    [
-      value,
-      open,
-      disabled,
-      anchorName,
-      openMenu,
-      closeAndFocusTrigger,
-      select,
-      registerItem,
-      highlighted,
-      setHighlighted,
-      onItemKeyDown,
-    ],
+    [value, open, disabled, anchorName, openMenu, closeAndFocusTrigger, select, list],
   );
 
   return (
@@ -379,18 +309,11 @@ function SelectContentImpl({
 }: SelectContentProps): React.ReactElement {
   const ctx = useSelectContext();
 
-  // On open, focus the selected option (or the first enabled one) so keyboard
-  // navigation has a starting point. Option effects run before this (children
-  // mount first), so the registry is already populated.
+  // On open, highlight & focus the selected option (or the first enabled one) so
+  // keyboard navigation has a starting point. Option effects run before this
+  // (children mount first), so the registry is already populated.
   useEffect(() => {
-    const items = ctx.items.current;
-    const selected = items.find((i) => i.value === ctx.value && !i.disabled);
-    const firstIndex = nextEnabledIndex(items, -1, 1, false);
-    const target = selected ?? (firstIndex === null ? undefined : items[firstIndex]);
-    if (target) {
-      ctx.setHighlighted(target.value);
-      target.focus();
-    }
+    ctx.list.focusInitial(ctx.value);
     // Run once when the list mounts (i.e. opens).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -443,30 +366,25 @@ export function SelectItem({
   const ctx = useSelectContext();
   const disabled = ctx.disabled || itemDisabled;
   const selected = ctx.value === itemValue;
-  const highlighted = ctx.highlighted === itemValue;
+  const highlighted = ctx.list.highlighted === itemValue;
 
-  const elementRef = useRef<GpuiInstance | null>(null);
-  const record = useRef<ItemRecord>({
-    value: itemValue,
-    disabled,
-    focus: () => elementRef.current?.focus(),
-  });
-  record.current.value = itemValue;
-  record.current.disabled = disabled;
-
-  const { registerItem } = ctx;
-  useEffect(() => registerItem(record.current), [registerItem]);
+  const item = useListItem(ctx.list, itemValue, disabled);
 
   const handleClick = composeEventHandlers<GpuiMouseEvent>(onClick, () => {
     if (!disabled) ctx.select(itemValue);
   });
 
-  // Arrow / Home / End / Escape; selection comes from the runtime's click.
-  const handleKeyDown = composeEventHandlers<GpuiKeyboardEvent>(onKeyDown, (e) =>
-    ctx.onItemKeyDown(itemValue, e),
-  );
+  // Escape closes the list; arrow / Home / End move the highlight. Selection
+  // comes from the runtime's click (Enter / Space activate the focused option).
+  const handleKeyDown = composeEventHandlers<GpuiKeyboardEvent>(onKeyDown, (e) => {
+    if (e.key === "escape") {
+      ctx.closeAndFocusTrigger();
+      return;
+    }
+    item.onKeyDown(e);
+  });
 
-  const handleFocus = composeEventHandlers(onFocus, () => ctx.setHighlighted(itemValue));
+  const handleFocus = composeEventHandlers(onFocus, item.onFocus);
 
   const itemCtx = useMemo<SelectItemContextValue>(
     () => ({ selected, highlighted, disabled, value: itemValue }),
@@ -477,7 +395,7 @@ export function SelectItem({
     <SelectItemContextProvider value={itemCtx}>
       <View
         {...viewProps}
-        ref={mergeRefs(ref, elementRef)}
+        ref={mergeRefs(ref, item.ref)}
         tabIndex={-1}
         onClick={disabled ? undefined : handleClick}
         onKeyDown={handleKeyDown}
