@@ -1,9 +1,8 @@
 use boa_engine::{Context as JsContext, JsObject, JsValue, js_string, property::PropertyKey};
-use gpui::Rgba;
 
-use super::color::parse_color;
 use super::reader::{PropReader, length_from_value};
 use crate::anim::{Easing, TransitionProperty, TransitionSpec, field_id_from_name};
+use crate::coerce::{JsValueExt, js_array_values};
 use crate::model::Props;
 use crate::style::fields::{
     FloatingSpec, LengthValue, StyleFields, parse_floating_area, parse_window_control_area,
@@ -53,18 +52,6 @@ fn mark_composite(seen: &mut CompositeSeen, key: &str) -> bool {
 // Simple (1:1 key → field) assignment
 // ---------------------------------------------------------------------------
 
-fn str_of(value: &JsValue) -> Option<String> {
-    value.as_string().and_then(|s| s.to_std_string().ok())
-}
-
-fn f32_of(value: &JsValue) -> Option<f32> {
-    value.as_number().map(|n| n as f32)
-}
-
-fn color_of(value: &JsValue) -> Option<Rgba> {
-    str_of(value).and_then(|s| parse_color(&s))
-}
-
 /// Table of simple (1:1 key → field) style props: `(rust_field, "jsName", Kind)`.
 /// Generates [`apply_simple_field`]. `Kind` picks the JS→Rust converter, whose
 /// return type must match the `StyleFields` field type — a `Kind`/field mismatch
@@ -73,11 +60,11 @@ fn color_of(value: &JsValue) -> Option<Rgba> {
 /// tables behind a shared `animatable` flag is a possible future consolidation.)
 macro_rules! simple_style_fields {
     (@convert Length, $value:expr) => { length_from_value($value) };
-    (@convert F32, $value:expr) => { f32_of($value) };
-    (@convert Str, $value:expr) => { str_of($value) };
-    (@convert Color, $value:expr) => { color_of($value) };
+    (@convert F32, $value:expr) => { $value.as_f32() };
+    (@convert Str, $value:expr) => { $value.as_str() };
+    (@convert Color, $value:expr) => { $value.as_color() };
     // Grid track counts: number → u16, min 1.
-    (@convert GridTrack, $value:expr) => { f32_of($value).map(|n| (n as u16).max(1)) };
+    (@convert GridTrack, $value:expr) => { $value.as_f32().map(|n| (n as u16).max(1)) };
     ($(($field:ident, $name:literal, $kind:ident)),* $(,)?) => {
         /// Assign a single non-composite style field from an already-fetched JS `value`.
         /// Only assigns when conversion yields `Some`, so an unparseable high-priority value
@@ -295,7 +282,7 @@ fn parse_style_fields(objs: &[&JsObject], ctx: &mut JsContext) -> StyleFields {
 fn parse_transition_item(obj: &JsObject, ctx: &mut JsContext) -> Option<TransitionSpec> {
     let property = match obj.get(js_string!("property"), ctx).ok() {
         Some(v) if !v.is_undefined() => {
-            let s = str_of(&v)?;
+            let s = v.as_str()?;
             if s == "all" {
                 TransitionProperty::All
             } else {
@@ -307,19 +294,19 @@ fn parse_transition_item(obj: &JsObject, ctx: &mut JsContext) -> Option<Transiti
     let duration_ms = obj
         .get(js_string!("duration"), ctx)
         .ok()
-        .and_then(|v| f32_of(&v))
+        .and_then(|v| v.as_f32())
         .map(|n| n.max(0.0))
         .unwrap_or(0.0);
     let delay_ms = obj
         .get(js_string!("delay"), ctx)
         .ok()
-        .and_then(|v| f32_of(&v))
+        .and_then(|v| v.as_f32())
         .map(|n| n.max(0.0))
         .unwrap_or(0.0);
     let easing = obj
         .get(js_string!("easing"), ctx)
         .ok()
-        .and_then(|v| str_of(&v))
+        .and_then(|v| v.as_str())
         .and_then(|s| Easing::parse(&s))
         .unwrap_or(Easing::Ease);
     Some(TransitionSpec {
@@ -338,17 +325,10 @@ fn parse_transitions(value: &JsValue, ctx: &mut JsContext) -> Vec<TransitionSpec
     if !obj.is_array() {
         return parse_transition_item(&obj, ctx).into_iter().collect();
     }
-    let len = obj
-        .get(js_string!("length"), ctx)
-        .ok()
-        .and_then(|v| v.as_number())
-        .unwrap_or(0.0) as u32;
-    let mut specs = Vec::with_capacity(len as usize);
-    for i in 0..len {
-        if let Ok(item) = obj.get(js_string!(format!("{i}")), ctx) {
-            if let Some(item_obj) = item.as_object() {
-                specs.extend(parse_transition_item(&item_obj, ctx));
-            }
+    let mut specs = Vec::new();
+    for item in js_array_values(&obj, ctx) {
+        if let Some(item_obj) = item.as_object() {
+            specs.extend(parse_transition_item(&item_obj, ctx));
         }
     }
     specs
@@ -365,12 +345,12 @@ fn parse_floating(obj: &JsObject, ctx: &mut JsContext) -> Option<FloatingSpec> {
     let floating_val = obj.get(js_string!("floating"), ctx).ok()?;
     let floating_obj = floating_val.as_object()?;
 
-    let anchor = str_of(&floating_obj.get(js_string!("anchor"), ctx).ok()?)?;
+    let anchor = floating_obj.get(js_string!("anchor"), ctx).ok()?.as_str()?;
 
     let (side, align) = floating_obj
         .get(js_string!("area"), ctx)
         .ok()
-        .and_then(|v| str_of(&v))
+        .and_then(|v| v.as_str())
         .map(|s| parse_floating_area(&s))
         .unwrap_or_else(|| parse_floating_area(""));
 
@@ -389,7 +369,7 @@ fn parse_floating(obj: &JsObject, ctx: &mut JsContext) -> Option<FloatingSpec> {
     let priority = floating_obj
         .get(js_string!("priority"), ctx)
         .ok()
-        .and_then(|v| f32_of(&v))
+        .and_then(|v| v.as_f32())
         .map(|n| n as u16);
 
     Some(FloatingSpec {

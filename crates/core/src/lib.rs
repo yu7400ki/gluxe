@@ -15,6 +15,7 @@ extern crate self as gluxe;
 mod anim;
 mod assets;
 mod bridge;
+mod coerce;
 mod component;
 mod config;
 // Dev-mode hot reload (GLUXE_DEV_DIST + file watcher). Debug builds only;

@@ -1,9 +1,10 @@
 use boa_engine::{
     Context as JsContext, JsNativeError, JsObject, JsValue, NativeFunction, js_string,
-    object::builtins::JsArray, property::PropertyKey,
+    object::builtins::JsArray,
 };
 
 use crate::{
+    coerce::js_to_json,
     component,
     model::{ElementKind, Events, Props, UICommand},
     plugin, state,
@@ -14,72 +15,6 @@ use crate::{
 // ---------------------------------------------------------------------------
 // Bridge registration
 // ---------------------------------------------------------------------------
-
-/// Recursively convert a JS value into a `serde_json::Value`.
-///
-/// Used to pass raw props to native component render functions. Skips callable
-/// values defensively (JS already strips handlers in `extractHandlers`).
-/// Implemented by hand rather than boa's `to_json` to avoid a feature flag and
-/// to control how non-JSON values (NaN, ±Inf, symbols) map.
-fn js_to_json(value: &JsValue, ctx: &mut JsContext) -> serde_json::Value {
-    use serde_json::Value;
-
-    if value.is_null_or_undefined() {
-        return Value::Null;
-    }
-    if let Some(b) = value.as_boolean() {
-        return Value::Bool(b);
-    }
-    if let Some(n) = value.as_number() {
-        // Store integral values as JSON integers: JS has only f64, so `5`
-        // arrives as `5.0`; a float-backed serde number would make `as_u64()` return `None`.
-        if n.is_finite() && n.fract() == 0.0 && n >= i64::MIN as f64 && n <= i64::MAX as f64 {
-            return Value::Number((n as i64).into());
-        }
-        // NaN / ±Inf are not representable in JSON → Null.
-        return serde_json::Number::from_f64(n)
-            .map(Value::Number)
-            .unwrap_or(Value::Null);
-    }
-    if let Some(s) = value.as_string() {
-        return Value::String(s.to_std_string().unwrap_or_default());
-    }
-    if let Some(obj) = value.as_object() {
-        if obj.is_array() {
-            let len = obj
-                .get(js_string!("length"), ctx)
-                .ok()
-                .and_then(|v| v.as_number())
-                .unwrap_or(0.0) as u32;
-            let mut arr = Vec::with_capacity(len as usize);
-            for i in 0..len {
-                let item = obj.get(js_string!(format!("{i}")), ctx).unwrap_or_default();
-                arr.push(js_to_json(&item, ctx));
-            }
-            return Value::Array(arr);
-        }
-        // Own string + integer-index keys only (symbols skipped).
-        // Integer-index keys arrive as `PropertyKey::Index` and are stringified
-        // so they aren't silently dropped.
-        let mut map = serde_json::Map::new();
-        if let Ok(keys) = obj.own_property_keys(ctx) {
-            for key in keys {
-                let key_str = match &key {
-                    PropertyKey::String(k) => k.to_std_string().unwrap_or_default(),
-                    PropertyKey::Index(i) => i.get().to_string(),
-                    PropertyKey::Symbol(_) => continue,
-                };
-                let v = obj.get(key, ctx).unwrap_or_default();
-                if v.is_callable() {
-                    continue;
-                }
-                map.insert(key_str, js_to_json(&v, ctx));
-            }
-        }
-        return Value::Object(map);
-    }
-    Value::Null
-}
 
 /// Parse `Props` from bridge args: position 1 = props object, position 2 =
 /// event-type array. Used by both `createInstance` and `updateProps`.

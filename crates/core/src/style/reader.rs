@@ -4,20 +4,15 @@ use gpui::{DefiniteLength, GridPlacement, Rgba, px, relative, rems};
 use super::color::parse_color;
 use super::grid::parse_grid_shorthand;
 use super::length::parse_length_str;
+use crate::coerce::{JsValueExt, js_array_values};
 use crate::style::fields::{BoxShadowSpec, LengthValue, OverflowMode, ShadowValue};
 
 fn get_f32(obj: &JsObject, key: &str, ctx: &mut JsContext) -> Option<f32> {
-    obj.get(js_string!(key), ctx)
-        .ok()
-        .and_then(|value| value.as_number())
-        .map(|number| number as f32)
+    obj.get(js_string!(key), ctx).ok().and_then(|v| v.as_f32())
 }
 
 fn get_str(obj: &JsObject, key: &str, ctx: &mut JsContext) -> Option<String> {
-    obj.get(js_string!(key), ctx)
-        .ok()
-        .and_then(|value| value.as_string())
-        .and_then(|string| string.to_std_string().ok())
+    obj.get(js_string!(key), ctx).ok().and_then(|v| v.as_str())
 }
 
 fn get_bool(obj: &JsObject, key: &str, ctx: &mut JsContext) -> Option<bool> {
@@ -29,13 +24,11 @@ fn get_bool(obj: &JsObject, key: &str, ctx: &mut JsContext) -> Option<bool> {
 /// Convert an already-read JS value into a [`LengthValue`].
 /// Bare number → `Px(n)`; string → [`parse_length_str`].
 pub(crate) fn length_from_value(value: &JsValue) -> Option<LengthValue> {
-    if let Some(n) = value.as_number() {
-        return Some(LengthValue::Px(n as f32));
+    if let Some(n) = value.as_f32() {
+        return Some(LengthValue::Px(n));
     }
-    if let Some(s) = value.as_string() {
-        if let Ok(s) = s.to_std_string() {
-            return parse_length_str(&s);
-        }
+    if let Some(s) = value.as_str() {
+        return parse_length_str(&s);
     }
     None
 }
@@ -185,17 +178,10 @@ fn get_box_shadow(obj: &JsObject, ctx: &mut JsContext) -> Option<BoxShadowSpec> 
     }
     if let Some(obj_val) = val.as_object() {
         if obj_val.is_array() {
-            let length = obj_val
-                .get(js_string!("length"), ctx)
-                .ok()
-                .and_then(|v| v.as_number())
-                .unwrap_or(0.0) as u32;
-            let mut layers = Vec::with_capacity(length as usize);
-            for i in 0..length {
-                if let Ok(item_val) = obj_val.get(js_string!(format!("{i}")), ctx) {
-                    if let Some(item) = item_val.as_object() {
-                        layers.push(parse_shadow_value(&item, ctx));
-                    }
+            let mut layers = Vec::new();
+            for item_val in js_array_values(&obj_val, ctx) {
+                if let Some(item) = item_val.as_object() {
+                    layers.push(parse_shadow_value(&item, ctx));
                 }
             }
             if layers.is_empty() {
