@@ -68,8 +68,9 @@ pub(crate) fn register_builtin_components() {
     });
 }
 
-/// Insert components into the registry. Must be called before the JS bundle
-/// is evaluated so `parse_kind` can resolve native types during reconciliation.
+/// Insert components into the registry. Must be called before the JS bundle is
+/// evaluated so `ElementKind::from_type_name` can resolve native types during
+/// reconciliation.
 ///
 /// The reserved `__` namespace is owned by [`register_builtin_components`]; user
 /// components must not use it (mirrors the plugin-name rule in `plugin.rs`).
@@ -87,7 +88,8 @@ pub(crate) fn register_components(list: Vec<Component>) {
     });
 }
 
-/// Whether `name` is a registered native component (`bridge::parse_kind` uses this).
+/// Whether `name` is a registered native component (`ElementKind::from_type_name`
+/// uses this to decide whether an unknown type is a native component or a `View`).
 pub(crate) fn is_registered(name: &str) -> bool {
     COMPONENTS.with(|c| c.borrow().contains_key(name))
 }

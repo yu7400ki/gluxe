@@ -15,19 +15,6 @@ use crate::{
 // Bridge registration
 // ---------------------------------------------------------------------------
 
-fn parse_kind(type_str: &str) -> ElementKind {
-    match type_str {
-        "View" => ElementKind::View,
-        "Text" => ElementKind::Text,
-        "Image" => ElementKind::Image,
-        "TextInput" => ElementKind::TextInput,
-        // Any other type string is a host-registered native component when its
-        // name is in the registry; otherwise fall back to a plain `View`.
-        other if component::is_registered(other) => ElementKind::Native(other.to_string()),
-        _ => ElementKind::View,
-    }
-}
-
 /// Recursively convert a JS value into a `serde_json::Value`.
 ///
 /// Used to pass raw props to native component render functions. Skips callable
@@ -125,8 +112,8 @@ fn props_from_args(args: &[JsValue], ctx: &mut JsContext, capture_raw: bool) -> 
 pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let create_instance = NativeFunction::from_copy_closure(|_this, args, ctx| {
         let type_str: String = args.first().cloned().unwrap_or_default().try_js_into(ctx)?;
-        let kind = parse_kind(&type_str);
-        let capture_raw = matches!(kind, ElementKind::Native(_));
+        let kind = ElementKind::from_type_name(&type_str, component::is_registered);
+        let capture_raw = kind.is_native();
         let props = props_from_args(&args, ctx, capture_raw);
         let id = next_id();
         push_cmd(UICommand::CreateInstance { id, kind, props });
@@ -196,7 +183,8 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
             .unwrap_or_default()
             .try_js_into(ctx)
             .unwrap_or_default();
-        let capture_raw = matches!(parse_kind(&type_str), ElementKind::Native(_));
+        let capture_raw =
+            ElementKind::from_type_name(&type_str, component::is_registered).is_native();
         let props = props_from_args(&args, ctx, capture_raw);
         push_cmd(UICommand::UpdateProps { id, props });
         Ok(JsValue::undefined())

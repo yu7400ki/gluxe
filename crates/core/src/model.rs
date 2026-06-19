@@ -186,6 +186,32 @@ pub(crate) enum ElementKind {
     Native(String),
 }
 
+impl ElementKind {
+    /// Resolve a JS element-type string to its kind. The built-in names map
+    /// directly; any other name is a host-registered native component when
+    /// `is_registered` accepts it, otherwise it falls back to a plain `View`.
+    ///
+    /// The registry predicate is injected so the data model stays independent of
+    /// the runtime component registry (`component.rs`). The single source of the
+    /// string→kind mapping — the bridge calls this rather than matching inline.
+    pub(crate) fn from_type_name(name: &str, is_registered: impl Fn(&str) -> bool) -> Self {
+        match name {
+            "View" => Self::View,
+            "Text" => Self::Text,
+            "Image" => Self::Image,
+            "TextInput" => Self::TextInput,
+            other if is_registered(other) => Self::Native(other.to_string()),
+            _ => Self::View,
+        }
+    }
+
+    /// Whether this is a host-registered native GPUI component (carries a raw-prop
+    /// payload for its render fn, so the bridge re-captures props on update).
+    pub(crate) fn is_native(&self) -> bool {
+        matches!(self, Self::Native(_))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Element {
     pub(crate) kind: ElementKind,
@@ -487,6 +513,44 @@ pub(crate) fn apply_command(tree: &mut Tree, cmd: UICommand) -> ApplyOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- ElementKind::from_type_name / is_native ----
+
+    #[test]
+    fn element_kind_builtin_names_map_directly() {
+        // Built-in names never consult the registry predicate.
+        let never = |_: &str| false;
+        assert_eq!(
+            ElementKind::from_type_name("View", never),
+            ElementKind::View
+        );
+        assert_eq!(
+            ElementKind::from_type_name("Text", never),
+            ElementKind::Text
+        );
+        assert_eq!(
+            ElementKind::from_type_name("Image", never),
+            ElementKind::Image
+        );
+        assert_eq!(
+            ElementKind::from_type_name("TextInput", never),
+            ElementKind::TextInput
+        );
+    }
+
+    #[test]
+    fn element_kind_registered_name_is_native() {
+        let kind = ElementKind::from_type_name("Chart", |n| n == "Chart");
+        assert_eq!(kind, ElementKind::Native("Chart".to_string()));
+        assert!(kind.is_native());
+    }
+
+    #[test]
+    fn element_kind_unregistered_name_falls_back_to_view() {
+        let kind = ElementKind::from_type_name("Chart", |_| false);
+        assert_eq!(kind, ElementKind::View);
+        assert!(!kind.is_native());
+    }
 
     // ---- Events::from_types / any ----
 
