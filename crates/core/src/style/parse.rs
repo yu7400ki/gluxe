@@ -386,6 +386,17 @@ fn parse_floating(obj: &JsObject, ctx: &mut JsContext) -> Option<FloatingSpec> {
 // Public entry point
 // ---------------------------------------------------------------------------
 
+/// Parse a nested pseudo-selector style block (`_hover` / `_active` / `_focus` /
+/// `_focusVisible`) from the `style` object, when `key` is present and an object.
+fn nested_style(
+    style_obj: Option<&JsObject>,
+    key: &str,
+    ctx: &mut JsContext,
+) -> Option<Box<StyleFields>> {
+    let obj = style_obj?.get(js_string!(key), ctx).ok()?.as_object()?;
+    Some(Box::new(parse_style_fields(&[&obj], ctx)))
+}
+
 pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
     // `style` sub-object takes precedence over top-level prop keys.
     let style_obj: Option<JsObject> = obj
@@ -401,29 +412,10 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
     let style = parse_style_fields(&objs, ctx);
 
     // Pseudo-selector overrides are parsed from nested objects inside `style` only.
-    let hover_obj = style_obj
-        .as_ref()
-        .and_then(|s| s.get(js_string!("_hover"), ctx).ok())
-        .and_then(|value| value.as_object());
-    let hover = hover_obj.map(|ho| Box::new(parse_style_fields(&[&ho], ctx)));
-
-    let active_obj = style_obj
-        .as_ref()
-        .and_then(|s| s.get(js_string!("_active"), ctx).ok())
-        .and_then(|value| value.as_object());
-    let active = active_obj.map(|ao| Box::new(parse_style_fields(&[&ao], ctx)));
-
-    let focus_obj = style_obj
-        .as_ref()
-        .and_then(|s| s.get(js_string!("_focus"), ctx).ok())
-        .and_then(|value| value.as_object());
-    let focus_style = focus_obj.map(|fo| Box::new(parse_style_fields(&[&fo], ctx)));
-
-    let focus_visible_obj = style_obj
-        .as_ref()
-        .and_then(|s| s.get(js_string!("_focusVisible"), ctx).ok())
-        .and_then(|value| value.as_object());
-    let focus_visible_style = focus_visible_obj.map(|fo| Box::new(parse_style_fields(&[&fo], ctx)));
+    let hover = nested_style(style_obj.as_ref(), "_hover", ctx);
+    let active = nested_style(style_obj.as_ref(), "_active", ctx);
+    let focus_style = nested_style(style_obj.as_ref(), "_focus", ctx);
+    let focus_visible_style = nested_style(style_obj.as_ref(), "_focusVisible", ctx);
 
     // Transitions come from `style` only (never top-level, never `_hover`/`_active`).
     let transitions = style_obj
