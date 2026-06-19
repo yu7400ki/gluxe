@@ -122,57 +122,60 @@ impl Props {
     }
 }
 
-/// Which JS event handlers an element has registered.
+/// The element-level event vocabulary: `(rust_field, "wireType")`. Generates the
+/// [`Events`] presence flags, [`Events::any`], and [`Events::from_types`] from one
+/// canonical list so they cannot drift apart.
 ///
-/// Only presence flags are stored in Rust; the actual JS functions live in the
-/// `handlers` Map in host-config.ts (avoids GC-tracing issues with Boa JsObjects).
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub(crate) struct Events {
-    pub(crate) click: bool,
-    pub(crate) mousedown: bool,
-    pub(crate) mouseup: bool,
-    pub(crate) mousemove: bool,
-    pub(crate) mouseenter: bool,
-    pub(crate) mouseleave: bool,
-    pub(crate) keydown: bool,
-    /// `onFocus` — element gained keyboard focus (View/Image; TextInput uses its own path).
-    pub(crate) focus: bool,
-    /// `onBlur` — element lost keyboard focus.
-    pub(crate) blur: bool,
-}
+/// The wire-type strings are the bridge contract: host-config.ts's `EVENT_MAP`
+/// sends these same strings. Only these View/Image focus/mouse/keyboard events
+/// become `Events` flags — TextInput's `change`/`submit` route through their own
+/// handler path and are deliberately absent here.
+macro_rules! events {
+    ($(($field:ident, $wire:literal)),* $(,)?) => {
+        /// Which JS event handlers an element has registered.
+        ///
+        /// Only presence flags are stored in Rust; the actual JS functions live in
+        /// the `handlers` Map in host-config.ts (avoids GC-tracing issues with Boa
+        /// JsObjects).
+        #[derive(Debug, Clone, Copy, Default, PartialEq)]
+        pub(crate) struct Events {
+            $(pub(crate) $field: bool,)*
+        }
 
-impl Events {
-    pub(crate) fn any(self) -> bool {
-        self.click
-            || self.mousedown
-            || self.mouseup
-            || self.mousemove
-            || self.mouseenter
-            || self.mouseleave
-            || self.keydown
-            || self.focus
-            || self.blur
-    }
+        impl Events {
+            /// Whether any event handler is registered on this element.
+            pub(crate) fn any(self) -> bool {
+                $(self.$field)||*
+            }
 
-    pub(crate) fn from_types(types: &[String]) -> Self {
-        let mut events = Events::default();
-        for event_type in types {
-            match event_type.as_str() {
-                "click" => events.click = true,
-                "mousedown" => events.mousedown = true,
-                "mouseup" => events.mouseup = true,
-                "mousemove" => events.mousemove = true,
-                "mouseenter" => events.mouseenter = true,
-                "mouseleave" => events.mouseleave = true,
-                "keydown" => events.keydown = true,
-                "focus" => events.focus = true,
-                "blur" => events.blur = true,
-                _ => {}
+            /// Build presence flags from the wire-type strings host-config sends
+            /// alongside each element. Unknown strings are ignored.
+            pub(crate) fn from_types(types: &[String]) -> Self {
+                let mut events = Events::default();
+                for event_type in types {
+                    match event_type.as_str() {
+                        $($wire => events.$field = true,)*
+                        _ => {}
+                    }
+                }
+                events
             }
         }
-        events
-    }
+    };
 }
+
+events![
+    (click, "click"),
+    (mousedown, "mousedown"),
+    (mouseup, "mouseup"),
+    (mousemove, "mousemove"),
+    (mouseenter, "mouseenter"),
+    (mouseleave, "mouseleave"),
+    (keydown, "keydown"),
+    // `onFocus` / `onBlur` — element gained/lost keyboard focus (View/Image only).
+    (focus, "focus"),
+    (blur, "blur"),
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ElementKind {
@@ -592,10 +595,13 @@ mod tests {
             "mouseenter".to_string(),
             "mouseleave".to_string(),
             "keydown".to_string(),
+            "focus".to_string(),
+            "blur".to_string(),
         ];
         let e = Events::from_types(&all);
         assert!(e.click && e.mousedown && e.mouseup && e.mousemove);
         assert!(e.mouseenter && e.mouseleave && e.keydown);
+        assert!(e.focus && e.blur);
     }
 
     #[test]
