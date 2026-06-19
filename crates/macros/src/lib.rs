@@ -29,7 +29,7 @@ enum Kind {
     Stream,
 }
 
-/// Parsed `#[command(...)]` arguments: `async` | `stream` | `name = "..."`.
+/// Parsed `#[command(...)]` arguments: `sync` | `async` | `stream` | `name = "..."`.
 struct Args {
     kind: Kind,
     name: Option<String>,
@@ -84,7 +84,7 @@ impl Parse for Args {
                             id.span(),
                             format!(
                                 "unknown #[command] argument `{other}`; \
-                                 expected `async`, `stream`, or `name = \"...\"`"
+                                 expected `sync`, `async`, `stream`, or `name = \"...\"`"
                             ),
                         ));
                     }

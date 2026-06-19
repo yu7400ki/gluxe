@@ -10,11 +10,13 @@
 //   const result = await invoke("fs|readTextFile", { path: "/foo.txt" });
 //
 // Each command is addressed by "{plugin_name}|{command_name}"; args and return
-// are JSON values (or a String error). Two flavours:
+// are JSON values (or a String error). Three flavours:
 //   - `command(...)`       — sync, inline on the Boa main thread; CPU-light work
 //                            only (blocks the UI thread).
 //   - `async_command(...)` — on a GPUI background thread; the JS `invoke` Promise
 //                            resolves when the pump picks up the result. For I/O.
+//   - `stream_command(...)`— on a GPUI background thread; pushes many chunks to a
+//                            `StreamSink` → JS `ReadableStream` (via `invokeStream`).
 
 use std::{
     cell::RefCell,
