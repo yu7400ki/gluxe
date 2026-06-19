@@ -102,13 +102,7 @@ export function SelectSection(): React.ReactElement {
                     paddingY: 8,
                     borderRadius: 8,
                     opacity: disabled ? 0.4 : 1,
-                    // Highlight tracks keyboard focus (the focused option);
                     backgroundColor: highlighted ? theme.surfaceHigh : "transparent",
-                    transition: {
-                      property: "all",
-                      duration: 100,
-                      easing: "ease-out",
-                    },
                   }}
                 >
                   <Text
