@@ -108,4 +108,5 @@ export const STYLE_PROP_SAMPLES = {
   caretColor: "#3d5a80",
   caretWidth: 2,
   selectionColor: "rgba(61,90,128,0.25)",
+  placeholderColor: "rgba(0,0,0,0.3)",
 } satisfies Required<BaseStyleProps>;
