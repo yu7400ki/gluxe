@@ -472,6 +472,47 @@ pub(crate) struct Tree {
     pub(crate) focusable_ids: FxHashMap<ElementId, bool>,
 }
 
+impl Tree {
+    /// Tab-stop focusables in `root`'s subtree (root included when it qualifies),
+    /// in GPUI `focus_next` order: ascending `tabIndex` (default `0`), ties by
+    /// preorder. Backs `getFocusableElements`.
+    pub(crate) fn focusable_descendants(&self, root: ElementId) -> Vec<ElementId> {
+        // (tab_index, preorder index, id) — sorted to match GPUI's TabStopMap.
+        let mut found: Vec<(i32, usize, ElementId)> = Vec::new();
+        let mut order: usize = 0;
+        let mut stack: Vec<ElementId> = vec![root];
+        // Preorder DFS; push children reversed so they pop in document order.
+        while let Some(id) = stack.pop() {
+            let Some(node) = self.nodes.get(&id) else {
+                continue;
+            };
+            let props = &node.props;
+            // TextInput is intrinsically focusable and a tab stop by default
+            // (mirrors text_input.rs); View/Image only when a focus prop is set,
+            // and a stop only when tabIndex >= 0 (mirrors render.rs attach_focus!).
+            let is_tab_stop = if matches!(node.kind, ElementKind::TextInput) {
+                props
+                    .tab_stop
+                    .unwrap_or_else(|| props.tab_index.map_or(true, |i| i >= 0))
+            } else {
+                props.is_focusable()
+                    && props
+                        .tab_stop
+                        .unwrap_or_else(|| props.tab_index.is_some_and(|i| i >= 0))
+            };
+            if is_tab_stop {
+                found.push((props.tab_index.unwrap_or(0), order, id));
+            }
+            order += 1;
+            for &child in node.children.iter().rev() {
+                stack.push(child);
+            }
+        }
+        found.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        found.into_iter().map(|(_, _, id)| id).collect()
+    }
+}
+
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct ApplyOutcome {
     pub(crate) dirty_nodes: FxHashSet<ElementId>,
@@ -1016,6 +1057,91 @@ mod tests {
             kind: ElementKind::View,
             props,
         }
+    }
+
+    fn make_tabbable_instance(id: ElementId, tab_index: Option<i32>) -> UICommand {
+        let mut props = Props::default();
+        props.tab_index = tab_index;
+        UICommand::CreateInstance {
+            id,
+            kind: ElementKind::View,
+            props,
+        }
+    }
+
+    // ---- focusable_descendants ----
+
+    #[test]
+    fn focusable_descendants_orders_by_tab_index_then_tree_order() {
+        let mut tree = Tree::default();
+        // panel(1) is programmatic-only (-1, skipped); children are tab stops.
+        apply_command(&mut tree, make_tabbable_instance(1, Some(-1)));
+        apply_command(&mut tree, make_tabbable_instance(2, Some(0))); // tree order 0
+        apply_command(&mut tree, make_tabbable_instance(3, Some(0))); // tree order 1, index 0
+        apply_command(&mut tree, make_tabbable_instance(4, Some(5))); // higher index → last
+        for child in [2, 3, 4] {
+            apply_command(&mut tree, UICommand::AppendChild { parent: 1, child });
+        }
+        // 2 and 3 share tabIndex 0 → tree order; 4 (index 5) sorts after both.
+        // 1 (index -1) is not a tab stop, so it is excluded.
+        assert_eq!(tree.focusable_descendants(1), vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn focusable_descendants_includes_plain_text_input() {
+        let mut tree = Tree::default();
+        // A bare TextInput (no focus props) is intrinsically a tab stop.
+        apply_command(&mut tree, make_tabbable_instance(1, Some(-1))); // panel, not a stop
+        apply_command(&mut tree, make_text_input_instance(2));
+        apply_command(
+            &mut tree,
+            UICommand::AppendChild {
+                parent: 1,
+                child: 2,
+            },
+        );
+        assert_eq!(tree.focusable_descendants(1), vec![2]);
+    }
+
+    #[test]
+    fn focusable_descendants_text_input_respects_tab_stop_overrides() {
+        let mut tree = Tree::default();
+        apply_command(&mut tree, make_tabbable_instance(1, Some(-1)));
+        // tabIndex < 0 takes the TextInput out of the Tab order.
+        let mut hidden = Props::default();
+        hidden.tab_index = Some(-1);
+        apply_command(
+            &mut tree,
+            UICommand::CreateInstance {
+                id: 2,
+                kind: ElementKind::TextInput,
+                props: hidden,
+            },
+        );
+        apply_command(
+            &mut tree,
+            UICommand::AppendChild {
+                parent: 1,
+                child: 2,
+            },
+        );
+        assert!(tree.focusable_descendants(1).is_empty());
+    }
+
+    #[test]
+    fn focusable_descendants_excludes_non_tab_stops_and_unknown_roots() {
+        let mut tree = Tree::default();
+        apply_command(&mut tree, make_view_instance(1)); // not focusable
+        apply_command(&mut tree, make_tabbable_instance(2, Some(-1))); // focusable, not a stop
+        apply_command(
+            &mut tree,
+            UICommand::AppendChild {
+                parent: 1,
+                child: 2,
+            },
+        );
+        assert!(tree.focusable_descendants(1).is_empty());
+        assert!(tree.focusable_descendants(999).is_empty());
     }
 
     // ---- apply_command — CreateInstance ----

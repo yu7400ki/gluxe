@@ -37,6 +37,10 @@ pub(crate) enum WindowCommand {
     SetTitle(String),
     /// Move keyboard focus to the element with this id (no-op if not focusable).
     FocusElement(ElementId),
+    /// Focus the first tab-stop focusable inside this subtree (or the element
+    /// itself when it has none). Processed after the command flush, so the just-
+    /// mounted subtree is visible — the race-free "focus into a scope on open".
+    FocusFirstIn(ElementId),
     /// Remove focus from the element with this id (only if it currently holds focus).
     BlurElement(ElementId),
 }
@@ -54,6 +58,54 @@ thread_local! {
     /// TextInput), or `None` for the root fallback / nothing. Refreshed every
     /// `RootView::render`; read synchronously by `__bridge.getActiveElement()`.
     static ACTIVE_ELEMENT: Cell<Option<ElementId>> = const { Cell::new(None) };
+    /// Stack of active Tab scopes (subtree roots). While non-empty, `FocusNext`/
+    /// `FocusPrev` confine Tab to the innermost scope — the runtime `inert`. A stack
+    /// so a nested overlay restores the outer scope on close.
+    static TAB_SCOPE_STACK: RefCell<Vec<ElementId>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Confine Tab to `id`'s subtree (push onto the scope stack).
+pub(crate) fn push_tab_scope(id: ElementId) {
+    TAB_SCOPE_STACK.with(|s| s.borrow_mut().push(id));
+}
+
+/// Release a Tab scope. Removes `id` by value (not just the top) so out-of-order
+/// unmounts can't strand a scope.
+pub(crate) fn pop_tab_scope(id: ElementId) {
+    TAB_SCOPE_STACK.with(|s| {
+        let mut stack = s.borrow_mut();
+        if let Some(pos) = stack.iter().rposition(|&x| x == id) {
+            stack.remove(pos);
+        }
+    });
+}
+
+/// The innermost active Tab scope, if any.
+pub(crate) fn active_tab_scope() -> Option<ElementId> {
+    TAB_SCOPE_STACK.with(|s| s.borrow().last().copied())
+}
+
+/// Next focus for Tab (`prev=false`) / Shift+Tab (`prev=true`) within a scope of
+/// tab order `order` and current focus `current`. Wraps at the ends; `current`
+/// outside `order` → first/last (recover into the scope). `None` iff `order`
+/// empty. Pure — unit-tested.
+pub(crate) fn scope_tab_target(
+    order: &[ElementId],
+    current: Option<ElementId>,
+    prev: bool,
+) -> Option<ElementId> {
+    let len = order.len();
+    if len == 0 {
+        return None;
+    }
+    let idx = current.and_then(|c| order.iter().position(|&x| x == c));
+    let next = match idx {
+        Some(i) if prev => (i + len - 1) % len,
+        Some(i) => (i + 1) % len,
+        None if prev => len - 1,
+        None => 0,
+    };
+    Some(order[next])
 }
 
 /// Record the element holding focus as of the current paint (called from
@@ -495,6 +547,9 @@ pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
                 if ACTIVE_ELEMENT.with(|c| c.get()) == Some(*id) {
                     ACTIVE_ELEMENT.with(|c| c.set(None));
                 }
+                // Defensive: drop a Tab scope whose root was detached without its
+                // unmount cleanup running.
+                pop_tab_scope(*id);
                 crate::render::drop_focus_subscriptions(*id);
                 crate::anim::remove_node(*id);
             }
@@ -622,6 +677,7 @@ pub(crate) fn reset_for_reload() {
     PENDING_FOCUS.with(|q| q.borrow_mut().clear());
     FOCUS_ANCHOR.with(|c| c.set(None));
     ACTIVE_ELEMENT.with(|c| c.set(None));
+    TAB_SCOPE_STACK.with(|s| s.borrow_mut().clear());
     crate::render::clear_focus_subscriptions();
     ARMED_DEADLINE.with(|a| a.set(None));
     // Ask any still-running stream handlers (from the old bundle) to wind down:
@@ -1069,6 +1125,14 @@ pub(crate) fn active_element_id(window: &Window, cx: &App) -> Option<ElementId> 
     })
 }
 
+/// Tab-stop focusables in `root`'s subtree (root included when it qualifies), in
+/// GPUI Tab order. Backs `__bridge.getFocusableElements`. Reads the tree as of the
+/// last applied commands (like [`active_element`]) — commands queued in the
+/// current JS task aren't visible yet. See [`Tree::focusable_descendants`].
+pub(crate) fn focusable_descendants(root: ElementId) -> Vec<ElementId> {
+    with_tree(|tree| tree.focusable_descendants(root))
+}
+
 /// Mark `id` as having received its initial autoFocus. Returns `true` the first
 /// time for a given `id` (caller should then call `window.focus`), `false` on
 /// subsequent calls (no-op to avoid stealing focus back on every re-render).
@@ -1091,6 +1155,46 @@ pub(crate) fn try_autofocus(id: ElementId, window: &mut Window, cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- Tab scope ----
+
+    #[test]
+    fn scope_tab_target_steps_and_wraps() {
+        let order = [10, 20, 30];
+        // Forward, wrapping past the end.
+        assert_eq!(scope_tab_target(&order, Some(10), false), Some(20));
+        assert_eq!(scope_tab_target(&order, Some(30), false), Some(10));
+        // Backward, wrapping past the start.
+        assert_eq!(scope_tab_target(&order, Some(20), true), Some(10));
+        assert_eq!(scope_tab_target(&order, Some(10), true), Some(30));
+    }
+
+    #[test]
+    fn scope_tab_target_recovers_when_focus_outside_scope() {
+        let order = [10, 20, 30];
+        assert_eq!(scope_tab_target(&order, Some(99), false), Some(10)); // → first
+        assert_eq!(scope_tab_target(&order, None, true), Some(30)); // → last
+    }
+
+    #[test]
+    fn scope_tab_target_empty_is_none() {
+        assert_eq!(scope_tab_target(&[], Some(1), false), None);
+    }
+
+    #[test]
+    fn tab_scope_stack_pushes_pops_by_value() {
+        assert_eq!(active_tab_scope(), None);
+        push_tab_scope(1);
+        push_tab_scope(2);
+        assert_eq!(active_tab_scope(), Some(2)); // innermost
+        // Out-of-order pop removes by value, not just the top.
+        pop_tab_scope(1);
+        assert_eq!(active_tab_scope(), Some(2));
+        pop_tab_scope(2);
+        assert_eq!(active_tab_scope(), None);
+        pop_tab_scope(99); // unknown id is a no-op
+        assert_eq!(active_tab_scope(), None);
+    }
 
     // ---- encode_invoke_result ----
 

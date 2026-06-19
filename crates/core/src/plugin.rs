@@ -333,6 +333,11 @@ fn builtin_focus_plugin() -> Plugin {
             push_window_command(WindowCommand::FocusElement(id));
             Ok(Value::Null)
         })
+        .command("focusFirstIn", |args| {
+            let id = require_id(&args, "__focus|focusFirstIn")?;
+            push_window_command(WindowCommand::FocusFirstIn(id));
+            Ok(Value::Null)
+        })
         .command("blur", |args| {
             let id = require_id(&args, "__focus|blur")?;
             push_window_command(WindowCommand::BlurElement(id));

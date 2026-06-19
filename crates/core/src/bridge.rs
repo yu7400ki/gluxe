@@ -1,6 +1,6 @@
 use boa_engine::{
     Context as JsContext, JsNativeError, JsObject, JsValue, NativeFunction, js_string,
-    property::PropertyKey,
+    object::builtins::JsArray, property::PropertyKey,
 };
 
 use crate::{
@@ -230,6 +230,26 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
         })
     });
 
+    // Tab-stop focusable ids in `rootId`'s subtree, in Tab order (last-paint
+    // tree). Backs `getFocusableElements(rootId)`. Read-only — no command queued.
+    let get_focusable_elements = NativeFunction::from_copy_closure(|_this, args, ctx| {
+        let root = element_id_arg(args, 0, ctx)?;
+        let ids = state::focusable_descendants(root);
+        let array = JsArray::from_iter(ids.into_iter().map(|id| JsValue::from(id as f64)), ctx);
+        Ok(array.into())
+    });
+
+    // Push/pop a Tab scope (confine Tab to a subtree). Synchronous thread-local
+    // mutation — no command queued; read by FocusNext/FocusPrev.
+    let push_tab_scope = NativeFunction::from_copy_closure(|_this, args, ctx| {
+        state::push_tab_scope(element_id_arg(args, 0, ctx)?);
+        Ok(JsValue::undefined())
+    });
+    let pop_tab_scope = NativeFunction::from_copy_closure(|_this, args, ctx| {
+        state::pop_tab_scope(element_id_arg(args, 0, ctx)?);
+        Ok(JsValue::undefined())
+    });
+
     let bridge = JsObject::with_object_proto(ctx.intrinsics());
     set_bridge_fn(ctx, &bridge, "createInstance", create_instance)?;
     set_bridge_fn(ctx, &bridge, "createText", create_text)?;
@@ -244,6 +264,9 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     set_bridge_fn(ctx, &bridge, "clearContainer", clear_container)?;
     set_bridge_fn(ctx, &bridge, "detachDeleted", detach_deleted)?;
     set_bridge_fn(ctx, &bridge, "getActiveElement", get_active_element)?;
+    set_bridge_fn(ctx, &bridge, "getFocusableElements", get_focusable_elements)?;
+    set_bridge_fn(ctx, &bridge, "pushTabScope", push_tab_scope)?;
+    set_bridge_fn(ctx, &bridge, "popTabScope", pop_tab_scope)?;
 
     ctx.global_object()
         .set(js_string!("__bridge"), bridge, false, ctx)?;

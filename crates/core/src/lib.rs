@@ -597,6 +597,20 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                                             state::defer_focus(id, state::FOCUS_RETRY_BUDGET);
                                         }
                                     }
+                                    state::WindowCommand::FocusFirstIn(root) => {
+                                        // After the flush the subtree is in the tree:
+                                        // focus its first inner tab stop (else the root),
+                                        // deferring if not painted yet (like FocusElement).
+                                        let target = state::focusable_descendants(root)
+                                            .first()
+                                            .copied()
+                                            .unwrap_or(root);
+                                        if let Some(handle) = get_focus_handle(target, cx) {
+                                            window.focus(&handle, cx);
+                                        } else {
+                                            state::defer_focus(target, state::FOCUS_RETRY_BUDGET);
+                                        }
+                                    }
                                     state::WindowCommand::BlurElement(id) => {
                                         // Blur only if this element holds focus, so it
                                         // can't steal focus from a sibling.

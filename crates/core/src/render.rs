@@ -802,6 +802,27 @@ impl RootView {
         }
     }
 
+    /// Handle Tab (`prev=false`) / Shift+Tab (`prev=true`): confine to the active
+    /// Tab scope's subtree if any, else GPUI's window-global focus_next/prev.
+    fn navigate_tab(&self, prev: bool, window: &mut Window, cx: &mut App) {
+        if let Some(scope) = crate::state::active_tab_scope() {
+            let order = crate::state::focusable_descendants(scope);
+            let current = crate::state::active_element_id(window, cx);
+            if let Some(target) = crate::state::scope_tab_target(&order, current, prev) {
+                if let Some(handle) = crate::state::get_focus_handle(target, cx) {
+                    window.focus(&handle, cx);
+                }
+            }
+        } else {
+            self.resume_focus_anchor(window, cx);
+            if prev {
+                window.focus_prev(cx);
+            } else {
+                window.focus_next(cx);
+            }
+        }
+    }
+
     pub(crate) fn apply_outcome(
         &mut self,
         outcome: ApplyOutcome,
@@ -853,12 +874,10 @@ impl Render for RootView {
             .track_focus(&self.focus_handle)
             .key_context(ROOT_KEY_CONTEXT)
             .on_action(cx.listener(|this, _: &FocusNext, window, cx| {
-                this.resume_focus_anchor(window, cx);
-                window.focus_next(cx);
+                this.navigate_tab(false, window, cx);
             }))
             .on_action(cx.listener(|this, _: &FocusPrev, window, cx| {
-                this.resume_focus_anchor(window, cx);
-                window.focus_prev(cx);
+                this.navigate_tab(true, window, cx);
             }))
             .size_full()
             .flex()
