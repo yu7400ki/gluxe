@@ -157,6 +157,21 @@ export interface ViewProps extends EventProps {
    * falling through to the content it floats above.
    */
   floating?: FloatingProps;
+  /**
+   * Whether this element blocks the mouse from reaching elements painted behind
+   * it. Without occlusion the runtime dispatches a click/hover to *every* element
+   * under the cursor (no `pointer-events` cascade), so overlapping elements all
+   * receive it.
+   *
+   * Defaults to `true` for out-of-flow overlays (`position: "absolute"` or
+   * `floating`) and `false` otherwise. Set it explicitly to decouple occlusion
+   * from layout: an in-flow element can block events (e.g. a centred dialog panel
+   * so clicks on it don't reach a dismiss layer behind), or an absolute element
+   * can opt out (`occlude={false}`, e.g. a decorative scrim that lets clicks pass
+   * through). Occlude sparingly — an occluding child suppresses an ancestor's
+   * `_hover` / `_active` where it overlaps.
+   */
+  occlude?: boolean;
 }
 
 export interface TextProps extends EventProps {
@@ -177,6 +192,10 @@ export interface ImageProps extends EventProps {
    */
   src: string;
   style?: StyleProps;
+  /** Whether this image blocks the mouse from reaching elements behind it.
+   *  Defaults to `true` for overlays (`position: "absolute"` / `floating`),
+   *  `false` otherwise. See {@link ViewProps.occlude}. */
+  occlude?: boolean;
 }
 
 export interface TextInputProps {
