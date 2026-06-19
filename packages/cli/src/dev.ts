@@ -5,7 +5,9 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { BUNDLE_MANIFEST_FILE, getRecord, readBundleOutDir, readDevBuildConfig } from "./config.js";
+import { BUNDLE_MANIFEST_FILE, type BundleManifest } from "@gluxe/config/manifest";
+
+import { getRecord, readBundleOutDir, readDevBuildConfig } from "./config.js";
 import { type Child, onSignals, ProcessSupervisor } from "./process.js";
 import { ensureCargoToml, resolveProject } from "./project.js";
 
@@ -36,9 +38,10 @@ export async function checkManifestReady(
     return false; // still the previous session's build
   }
 
-  let entry: unknown;
+  let entry: BundleManifest["entry"] | undefined;
   try {
-    entry = getRecord(JSON.parse(await readFile(manifestPath, "utf8"))).entry;
+    entry = (getRecord(JSON.parse(await readFile(manifestPath, "utf8"))) as Partial<BundleManifest>)
+      .entry;
   } catch {
     return false;
   }

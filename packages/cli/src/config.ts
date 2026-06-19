@@ -4,8 +4,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-export const BUNDLE_MANIFEST_FILE = "gluxe.manifest.json";
-
 export interface BundleBuildConfig {
   command: string;
   args: string[];

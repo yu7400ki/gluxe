@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { BUNDLE_MANIFEST_FILE, type BundleManifest } from "@gluxe/config/manifest";
 import type { Plugin } from "vite";
-
-const BUNDLE_MANIFEST_FILE = "gluxe.manifest.json";
 
 export type GluxeOptions = {
   configPath?: string; // default: "app.json" in project root
@@ -83,20 +82,17 @@ export function gluxe(options: GluxeOptions = {}): Plugin {
         });
         iconFileName = this.getFileName(ref);
       }
+      const manifest: BundleManifest = {
+        // Spread first so hashed entry/icon paths can't be shadowed by a runtimeConfig key.
+        ...runtimeConfig,
+        version: 1,
+        entry: entryChunks[0].fileName,
+        ...(iconFileName ? { icon: iconFileName } : {}),
+      };
       this.emitFile({
         type: "asset",
         fileName: BUNDLE_MANIFEST_FILE,
-        source: `${JSON.stringify(
-          {
-            // Spread first so hashed entry/icon paths can't be shadowed by a runtimeConfig key.
-            ...runtimeConfig,
-            version: 1,
-            entry: entryChunks[0].fileName,
-            ...(iconFileName ? { icon: iconFileName } : {}),
-          },
-          null,
-          2,
-        )}\n`,
+        source: `${JSON.stringify(manifest, null, 2)}\n`,
       });
     },
   };
