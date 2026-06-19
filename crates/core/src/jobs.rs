@@ -94,6 +94,17 @@ impl GpuiJobExecutor {
                 .next()
                 .is_none_or(|earliest| *earliest >= now)
     }
+
+    /// Park a clock job at its absolute `deadline`, ordered so `next_due` finds the
+    /// earliest. Shared by the timeout/interval enqueue arms and the interval
+    /// self-re-enqueue.
+    fn park(&self, deadline: JsInstant, job: ClockJob) {
+        self.clock_jobs
+            .borrow_mut()
+            .entry(deadline)
+            .or_default()
+            .push(job);
+    }
 }
 
 impl JobExecutor for GpuiJobExecutor {
@@ -102,20 +113,12 @@ impl JobExecutor for GpuiJobExecutor {
             Job::PromiseJob(p) => self.promise_jobs.borrow_mut().push_back(p),
             Job::AsyncJob(a) => self.async_jobs.borrow_mut().push_back(a),
             Job::TimeoutJob(t) => {
-                let now = context.clock().now();
-                self.clock_jobs
-                    .borrow_mut()
-                    .entry(now + t.timeout())
-                    .or_default()
-                    .push(ClockJob::Timeout(t));
+                let deadline = context.clock().now() + t.timeout();
+                self.park(deadline, ClockJob::Timeout(t));
             }
             Job::IntervalJob(i) => {
-                let now = context.clock().now();
-                self.clock_jobs
-                    .borrow_mut()
-                    .entry(now + i.interval())
-                    .or_default()
-                    .push(ClockJob::Interval(i));
+                let deadline = context.clock().now() + i.interval();
+                self.park(deadline, ClockJob::Interval(i));
             }
             Job::GenericJob(g) => self.generic_jobs.borrow_mut().push_back(g),
             Job::FinalizationRegistryCleanupJob(fr) => {
@@ -167,6 +170,10 @@ impl JobExecutor for GpuiJobExecutor {
 
                 for jobs in jobs_to_run.into_values() {
                     for job in jobs {
+                        // Not redundant with the `retain` above: that filters the
+                        // kept *future* jobs, never these due ones. It also catches
+                        // intra-batch cancellation — an earlier due callback in this
+                        // same batch clearing a later due-but-not-yet-run timer.
                         if job.cancelled() {
                             continue;
                         }
@@ -178,17 +185,16 @@ impl JobExecutor for GpuiJobExecutor {
                                 }
                             }
                             ClockJob::Interval(job) => {
-                                let context = &mut context.borrow_mut();
-                                let now = context.clock().now();
-                                if let Err(err) = job.call(context) {
-                                    self.clear();
-                                    return Err(err);
-                                }
-                                self.clock_jobs
-                                    .borrow_mut()
-                                    .entry(now + job.interval())
-                                    .or_default()
-                                    .push(ClockJob::Interval(job));
+                                let now = {
+                                    let context = &mut context.borrow_mut();
+                                    let now = context.clock().now();
+                                    if let Err(err) = job.call(context) {
+                                        self.clear();
+                                        return Err(err);
+                                    }
+                                    now
+                                };
+                                self.park(now + job.interval(), ClockJob::Interval(job));
                             }
                         }
                     }
