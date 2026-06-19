@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useSyncExternalStore } from "react";
+import React, { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { LocationContext, RouteContext, RouterContext } from "./context";
 import { createMemoryHistory, type MemoryHistory } from "./history";
@@ -31,7 +31,6 @@ export function Router({ routes, initialEntries }: RouterProps): React.ReactElem
     () => history.location,
     () => history.location,
   );
-  const warnedPathnameRef = useRef<string | null>(null);
 
   const routerValue = useMemo(() => {
     const navigate: NavigateFunction = (to, options) => {
@@ -51,6 +50,17 @@ export function Router({ routes, initialEntries }: RouterProps): React.ReactElem
     [routes, location.pathname],
   );
 
+  // Warn after commit, not during render: a render-phase side effect can fire
+  // multiple times for one pathname (re-renders, StrictMode double-invoke).
+  // Keying the effect on the no-match result dedups those automatically.
+  useEffect(() => {
+    if (matches) return;
+    console.warn(
+      `[gluxe-router] No route matched "${location.pathname}". ` +
+        `Add a "*" route (404.tsx in the file-based router) to render a fallback.`,
+    );
+  }, [matches, location.pathname]);
+
   let element: React.ReactElement | null = null;
   if (matches) {
     element = matches.reduceRight<React.ReactElement | null>((outlet, match, index) => {
@@ -61,12 +71,6 @@ export function Router({ routes, initialEntries }: RouterProps): React.ReactElem
         </RouteContext.Provider>
       );
     }, null);
-  } else if (warnedPathnameRef.current !== location.pathname) {
-    warnedPathnameRef.current = location.pathname;
-    console.warn(
-      `[gluxe-router] No route matched "${location.pathname}". ` +
-        `Add a "*" route (404.tsx in the file-based router) to render a fallback.`,
-    );
   }
 
   return (
