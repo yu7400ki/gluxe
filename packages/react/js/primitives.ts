@@ -151,7 +151,11 @@ export interface ViewProps extends EventProps {
   windowControlArea?: "drag" | "close" | "max" | "min";
   /** Marks this element as a named anchor that `floating` elements can target. */
   anchorName?: string;
-  /** Positions this element as a floating overlay anchored to a named element. */
+  /**
+   * Positions this element as a floating overlay anchored to a named element.
+   * The overlay blocks the mouse over its area, so clicks land on it rather than
+   * falling through to the content it floats above.
+   */
   floating?: FloatingProps;
 }
 
@@ -374,7 +378,12 @@ export interface BaseStyleProps {
   marginRight?: Dimension;
   marginBottom?: Dimension;
   marginLeft?: Dimension;
-  /** `"absolute"` takes the element out of flow; use `inset`/`top`/… to place it. */
+  /**
+   * `"absolute"` takes the element out of flow; use `inset`/`top`/… to place it.
+   * An absolute element also blocks the mouse over its area, so clicks don't fall
+   * through to whatever it overlaps (matching the web; there is no
+   * `pointer-events: none` yet to opt back out).
+   */
   position?: "relative" | "absolute";
   /** Shorthand for all four inset offsets of a positioned element. */
   inset?: Dimension;

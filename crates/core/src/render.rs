@@ -315,6 +315,12 @@ macro_rules! attach_focus {
 macro_rules! build_div_with_pseudo {
     ($id:expr, $props:expr, $children:expr, $window:expr, $cx:expr) => {{
         let mut div = apply_style_props(div(), &$props.style);
+        // Overlays (floating / position:absolute) block the mouse from reaching
+        // content painted behind them; `should_insert_hitbox` is true for an
+        // occluded node even with no listeners, so this works for a bare backdrop.
+        if $props.is_overlay() {
+            div = div.occlude();
+        }
         if let Some(hover_props) = &$props.hover {
             let hover_props: &StyleFields = hover_props.as_ref();
             div = div.hover(|style| apply_style_props(style, hover_props));
@@ -672,6 +678,10 @@ impl Render for NodeView {
                         if let Some(a) = v.to_absolute() {
                             image = image.rounded(a);
                         }
+                    }
+                    // Overlay images block the mouse behind them (see `Props::is_overlay`).
+                    if element.props.is_overlay() {
+                        image = image.occlude();
                     }
 
                     // `.id()` → `Stateful<Img>` (StatefulInteractiveElement, same as Stateful<Div>).

@@ -352,6 +352,21 @@ impl Props {
             || self.focus_style.is_some()
             || self.focus_visible_style.is_some()
     }
+
+    /// Whether this element is an overlay that paints on top of other content and
+    /// must block the mouse from reaching elements painted behind it (GPUI's
+    /// `.occlude()`). True for floating elements and out-of-flow `position:absolute`
+    /// boxes — mirroring the web, where an out-of-flow positioned box captures
+    /// pointer events over its area (no `pointer-events: none` equivalent yet).
+    ///
+    /// Without this, GPUI dispatches a click/hover to *every* hitbox under the
+    /// cursor, so overlays (floating dropdowns, full-window dismiss backdrops) let
+    /// events fall through to whatever sits behind them. Scoped to overlays on
+    /// purpose: occluding ordinary nodes would suppress an ancestor's `_hover` /
+    /// `_active` wherever a child sits on top of it.
+    pub(crate) fn is_overlay(&self) -> bool {
+        self.floating.is_some() || self.style.position.as_deref() == Some("absolute")
+    }
 }
 
 /// Which JS event handlers an element has registered.
@@ -891,6 +906,41 @@ mod tests {
             parse_floating_area("left middle"),
             (FloatingSide::Left, FloatingAlign::Start)
         );
+    }
+
+    // ---- Props::is_overlay ----
+
+    #[test]
+    fn is_overlay_default_false() {
+        assert!(!Props::default().is_overlay());
+    }
+
+    #[test]
+    fn is_overlay_true_for_absolute_position() {
+        let mut props = Props::default();
+        props.style.position = Some("absolute".to_string());
+        assert!(props.is_overlay());
+    }
+
+    #[test]
+    fn is_overlay_false_for_relative_position() {
+        let mut props = Props::default();
+        props.style.position = Some("relative".to_string());
+        assert!(!props.is_overlay());
+    }
+
+    #[test]
+    fn is_overlay_true_for_floating() {
+        let mut props = Props::default();
+        props.floating = Some(FloatingSpec {
+            anchor: "a".to_string(),
+            side: FloatingSide::Bottom,
+            align: FloatingAlign::Start,
+            offset: LengthValue::Px(0.0),
+            margin: LengthValue::Px(0.0),
+            priority: None,
+        });
+        assert!(props.is_overlay());
     }
 
     // ---- apply_command — helpers (shared with sequence_tests below) ----
