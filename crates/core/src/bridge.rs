@@ -44,7 +44,21 @@ fn props_from_args(args: &[JsValue], ctx: &mut JsContext, capture_raw: bool) -> 
     props
 }
 
-pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
+/// Install every bridge global into a fresh Boa context: `__bridge` (reconciler
+/// ops), `__invoke` / `__invokeStream` / `__streamCancel` (native commands),
+/// `requestAnimationFrame` / `cancelAnimationFrame`, and `performance`.
+///
+/// Called once per context — at startup and on each dev-mode hot reload.
+pub(crate) fn register_all(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
+    register_bridge(ctx)?;
+    register_invoke(ctx)?;
+    register_stream(ctx)?;
+    register_raf(ctx)?;
+    register_performance(ctx)?;
+    Ok(())
+}
+
+fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let create_instance = NativeFunction::from_copy_closure(|_this, args, ctx| {
         let type_str = string_arg(args, 0, ctx)?;
         let kind = ElementKind::from_type_name(&type_str, component::is_registered);
@@ -273,7 +287,7 @@ fn set_bridge_fn(
 ///
 /// Returns `undefined`; result delivery is always deferred — the pump loop calls
 /// `__resolveInvoke` to settle the Promise whether the command was sync or async.
-pub(crate) fn register_invoke(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
+fn register_invoke(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let invoke_fn = NativeFunction::from_copy_closure(|_this, args, ctx| {
         let call_id = u64_arg(args, 0, ctx)?;
         let (key, args_value) = parse_invoke_args(args, ctx)?;
@@ -311,7 +325,7 @@ pub(crate) fn register_invoke(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
 ///
 /// Both closures are stateless, satisfying the `from_copy_closure` `Copy` bound;
 /// all state lives in `state`/`plugin` registries.
-pub(crate) fn register_stream(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
+fn register_stream(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let invoke_stream = NativeFunction::from_copy_closure(|_this, args, ctx| {
         let stream_id = u64_arg(args, 0, ctx)?;
         let (key, args_value) = parse_invoke_args(args, ctx)?;
@@ -354,7 +368,7 @@ pub(crate) fn register_stream(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
 /// Callbacks are queued in `state` and run by the render pump after each GPUI
 /// frame (see `state::run_raf_callbacks`). The callback receives a fractional-ms
 /// timestamp on the same monotonic clock as JS timers.
-pub(crate) fn register_raf(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
+fn register_raf(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let raf = NativeFunction::from_copy_closure(|_this, args, _ctx| {
         let Some(cb) = args.first().and_then(JsValue::as_callable) else {
             return Err(JsNativeError::typ()
@@ -381,7 +395,7 @@ pub(crate) fn register_raf(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
 /// `now()` returns fractional ms on the same monotonic clock as rAF and JS timers,
 /// relative to `timeOrigin` (epoch-ms at Boa context init). The sum
 /// `timeOrigin + now()` reconstructs the current wall-clock epoch milliseconds.
-pub(crate) fn register_performance(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
+fn register_performance(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
     let origin_ms = ctx.clock().now().nanos_since_epoch() as f64 / 1_000_000.0;
 
     let now_fn = NativeFunction::from_copy_closure(move |_this, _args, ctx| {

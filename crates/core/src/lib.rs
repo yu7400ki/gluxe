@@ -618,12 +618,7 @@ pub(crate) fn create_js_context() -> Result<JsContext, String> {
     )
     .map_err(|e| format!("boa_runtime registration failed: {e}"))?;
 
-    bridge::register_bridge(&mut js_ctx).map_err(|e| format!("bridge registration failed: {e}"))?;
-    bridge::register_invoke(&mut js_ctx).map_err(|e| format!("invoke registration failed: {e}"))?;
-    bridge::register_stream(&mut js_ctx).map_err(|e| format!("stream registration failed: {e}"))?;
-    bridge::register_raf(&mut js_ctx).map_err(|e| format!("raf registration failed: {e}"))?;
-    bridge::register_performance(&mut js_ctx)
-        .map_err(|e| format!("performance registration failed: {e}"))?;
+    bridge::register_all(&mut js_ctx).map_err(|e| format!("bridge registration failed: {e}"))?;
 
     crate::lifecycle::install();
 
