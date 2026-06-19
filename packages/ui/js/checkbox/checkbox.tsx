@@ -72,20 +72,17 @@ export function Checkbox({
   onClick,
   ...viewProps
 }: CheckboxProps): React.ReactElement {
-  // We intentionally omit onChange from useControllableState because its
-  // signature is (value: CheckedState) => void, but onCheckedChange expects
-  // only a boolean. We call onCheckedChange manually in the toggle wrapper.
-  const [checkedState = false, setCheckedState] = useControllableState<CheckedState>({
+  // Stores a tri-state value but only ever toggles to a boolean, so the setter
+  // (and onCheckedChange) take the narrower boolean directly. Indeterminate
+  // counts as unchecked, so a click moves it to `true`.
+  const [checkedState = false, setChecked] = useControllableState<CheckedState, boolean>({
     prop: checkedProp,
     defaultProp: defaultChecked,
+    onChange: onCheckedChange,
   });
 
   // No disabled guard: <Button> suppresses onClick while disabled.
-  const toggle = useCallback(() => {
-    const next = checkedState !== true;
-    setCheckedState(next);
-    onCheckedChange?.(next);
-  }, [checkedState, setCheckedState, onCheckedChange]);
+  const toggle = useCallback(() => setChecked(checkedState !== true), [checkedState, setChecked]);
 
   const context = useMemo<CheckboxContextValue>(
     () => ({ checked: checkedState, disabled, toggle }),

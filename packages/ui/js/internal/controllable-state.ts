@@ -1,12 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 
-export interface UseControllableStateParams<T> {
+export interface UseControllableStateParams<Stored, Change extends Stored = Stored> {
   /** The controlled value. When defined, the component is controlled. */
-  prop: T | undefined;
+  prop: Stored | undefined;
   /** Initial value used while uncontrolled. */
-  defaultProp: T | undefined;
-  /** Notified whenever the value is set, in both controlled and uncontrolled modes. */
-  onChange?: (value: T) => void;
+  defaultProp: Stored | undefined;
+  /** Notified with the value passed to the setter, in both controlled and
+   *  uncontrolled modes. */
+  onChange?: (value: Change) => void;
 }
 
 /**
@@ -16,15 +17,25 @@ export interface UseControllableStateParams<T> {
  * `onChange` and never mutates internal state. Otherwise it tracks the value
  * internally (seeded from `defaultProp`) and still fires `onChange`.
  *
+ * The stored value (`Stored`) and the value you ever *set* (`Change`) can
+ * differ: the setter — and therefore `onChange` — accepts the narrower `Change`,
+ * while `prop` / `defaultProp` / the returned value carry the wider `Stored`.
+ * They coincide by default. Checkbox uses this: it stores `boolean |
+ * "indeterminate"` but only ever toggles to a `boolean`, so `onChange` gets a
+ * `boolean` directly instead of a hand-written narrowing.
+ *
  * The returned value can be `undefined` when neither `prop` nor `defaultProp`
  * is supplied — callers should coalesce to a sensible default.
  */
-export function useControllableState<T>({
+export function useControllableState<Stored, Change extends Stored = Stored>({
   prop,
   defaultProp,
   onChange,
-}: UseControllableStateParams<T>): readonly [T | undefined, (next: T) => void] {
-  const [uncontrolled, setUncontrolled] = useState<T | undefined>(defaultProp);
+}: UseControllableStateParams<Stored, Change>): readonly [
+  Stored | undefined,
+  (next: Change) => void,
+] {
+  const [uncontrolled, setUncontrolled] = useState<Stored | undefined>(defaultProp);
   const isControlled = prop !== undefined;
   const value = isControlled ? prop : uncontrolled;
 
@@ -33,7 +44,7 @@ export function useControllableState<T>({
   onChangeRef.current = onChange;
 
   const setValue = useCallback(
-    (next: T) => {
+    (next: Change) => {
       if (!isControlled) {
         setUncontrolled(next);
       }
