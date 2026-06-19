@@ -246,10 +246,8 @@ macro_rules! attach_focus {
         if let Some(idx) = props.tab_index {
             handle = handle.tab_index(idx as isize);
         }
-        let tab_stop = props
-            .tab_stop
-            .unwrap_or_else(|| props.tab_index.is_some_and(|i| i >= 0));
-        handle = handle.tab_stop(tab_stop);
+        // `attach_focus!` is only used for View/Image (never TextInput).
+        handle = handle.tab_stop(props.resolve_tab_stop(false));
         s = s.track_focus(&handle);
         if let Some(fs) = &props.focus_style {
             let fs: &StyleFields = fs.as_ref();

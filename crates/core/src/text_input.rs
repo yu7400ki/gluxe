@@ -517,11 +517,9 @@ impl Render for TextInputState {
                 e.props.value.clone(),
                 e.props.placeholder.clone(),
                 e.props.tab_index,
-                // A bare <TextInput> is keyboard-reachable by default; `tabStop`
-                // overrides, and `tabIndex < 0` opts out of the Tab order.
-                e.props
-                    .tab_stop
-                    .unwrap_or_else(|| e.props.tab_index.map_or(true, |i| i >= 0)),
+                // A bare <TextInput> is keyboard-reachable by default (see
+                // `resolve_tab_stop`); `tabStop` overrides, `tabIndex < 0` opts out.
+                e.props.resolve_tab_stop(true),
                 e.props.style.caret_color,
                 e.props.style.caret_width,
                 e.props.style.selection_color,

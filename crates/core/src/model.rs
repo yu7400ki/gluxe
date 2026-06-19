@@ -357,6 +357,21 @@ impl Props {
             || self.focus_visible_style.is_some()
     }
 
+    /// Whether this element is a keyboard Tab stop: explicit `tabStop` wins;
+    /// otherwise a TextInput is a stop unless `tabIndex < 0`, while everything else
+    /// is a stop only with `tabIndex >= 0`. The SINGLE source for this rule — used
+    /// by the gpui handle config (render.rs `attach_focus!`, text_input.rs) and by
+    /// `Tree::focusable_descendants`, which must agree to keep Tab order consistent.
+    pub(crate) fn resolve_tab_stop(&self, is_text_input: bool) -> bool {
+        self.tab_stop.unwrap_or_else(|| {
+            if is_text_input {
+                self.tab_index.map_or(true, |i| i >= 0)
+            } else {
+                self.tab_index.is_some_and(|i| i >= 0)
+            }
+        })
+    }
+
     /// Whether this element, *by default*, is an overlay that paints on top of
     /// other content and should block the mouse from reaching elements painted
     /// behind it (GPUI's `.occlude()`). True for floating elements and out-of-flow
@@ -487,19 +502,11 @@ impl Tree {
                 continue;
             };
             let props = &node.props;
-            // TextInput is intrinsically focusable and a tab stop by default
-            // (mirrors text_input.rs); View/Image only when a focus prop is set,
-            // and a stop only when tabIndex >= 0 (mirrors render.rs attach_focus!).
-            let is_tab_stop = if matches!(node.kind, ElementKind::TextInput) {
-                props
-                    .tab_stop
-                    .unwrap_or_else(|| props.tab_index.map_or(true, |i| i >= 0))
-            } else {
-                props.is_focusable()
-                    && props
-                        .tab_stop
-                        .unwrap_or_else(|| props.tab_index.is_some_and(|i| i >= 0))
-            };
+            // TextInput is intrinsically focusable; View/Image only with a focus
+            // prop. The tab_stop default is single-sourced in `resolve_tab_stop`.
+            let is_text_input = matches!(node.kind, ElementKind::TextInput);
+            let is_tab_stop =
+                (is_text_input || props.is_focusable()) && props.resolve_tab_stop(is_text_input);
             if is_tab_stop {
                 found.push((props.tab_index.unwrap_or(0), order, id));
             }
@@ -1067,6 +1074,27 @@ mod tests {
             kind: ElementKind::View,
             props,
         }
+    }
+
+    // ---- resolve_tab_stop ----
+
+    #[test]
+    fn resolve_tab_stop_defaults_by_kind() {
+        let mut props = Props::default(); // no tabIndex, no tabStop
+        // TextInput defaults to a stop; View/Image do not.
+        assert!(props.resolve_tab_stop(true));
+        assert!(!props.resolve_tab_stop(false));
+        // tabIndex >= 0 makes either a stop; < 0 takes either out.
+        props.tab_index = Some(0);
+        assert!(props.resolve_tab_stop(true));
+        assert!(props.resolve_tab_stop(false));
+        props.tab_index = Some(-1);
+        assert!(!props.resolve_tab_stop(true));
+        assert!(!props.resolve_tab_stop(false));
+        // Explicit tabStop wins over the kind default and tabIndex.
+        props.tab_index = Some(-1);
+        props.tab_stop = Some(true);
+        assert!(props.resolve_tab_stop(false));
     }
 
     // ---- focusable_descendants ----
