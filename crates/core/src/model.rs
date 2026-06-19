@@ -337,6 +337,10 @@ pub(crate) struct Props {
     pub(crate) anchor_name: Option<String>,
     /// Positions this element relative to a named anchor (floating overlay).
     pub(crate) floating: Option<FloatingSpec>,
+    /// Explicit override for mouse occlusion (see [`Props::should_occlude`]).
+    /// `None` → derived from [`Props::is_overlay`]; `Some(b)` forces it on/off
+    /// regardless of position, decoupling occlusion from `position: absolute`.
+    pub(crate) occlude: Option<bool>,
 }
 
 impl Props {
@@ -353,19 +357,33 @@ impl Props {
             || self.focus_visible_style.is_some()
     }
 
-    /// Whether this element is an overlay that paints on top of other content and
-    /// must block the mouse from reaching elements painted behind it (GPUI's
-    /// `.occlude()`). True for floating elements and out-of-flow `position:absolute`
-    /// boxes — mirroring the web, where an out-of-flow positioned box captures
-    /// pointer events over its area (no `pointer-events: none` equivalent yet).
+    /// Whether this element, *by default*, is an overlay that paints on top of
+    /// other content and should block the mouse from reaching elements painted
+    /// behind it (GPUI's `.occlude()`). True for floating elements and out-of-flow
+    /// `position:absolute` boxes — an out-of-flow positioned box captures pointer
+    /// events over its area.
     ///
-    /// Without this, GPUI dispatches a click/hover to *every* hitbox under the
-    /// cursor, so overlays (floating dropdowns, full-window dismiss backdrops) let
-    /// events fall through to whatever sits behind them. Scoped to overlays on
-    /// purpose: occluding ordinary nodes would suppress an ancestor's `_hover` /
-    /// `_active` wherever a child sits on top of it.
+    /// This is only the *default* heuristic; the actual decision is
+    /// [`Props::should_occlude`], which an explicit `occlude` prop can override.
     pub(crate) fn is_overlay(&self) -> bool {
         self.floating.is_some() || self.style.position.as_deref() == Some("absolute")
+    }
+
+    /// Whether to call GPUI's `.occlude()` on this element, blocking the mouse
+    /// from reaching elements painted behind it.
+    ///
+    /// Without occlusion, GPUI dispatches a click/hover to *every* hitbox under
+    /// the cursor, so overlays (floating dropdowns, full-window dismiss backdrops)
+    /// let events fall through to whatever sits behind them. The explicit
+    /// `occlude` prop decouples this from layout: an in-flow element can block
+    /// events (e.g. a centred dialog panel inside a flex positioner, so clicks on
+    /// it don't reach the dismiss layer), and an out-of-flow `position:absolute`
+    /// element can opt *out* (e.g. a decorative scrim that lets clicks through).
+    ///
+    /// Occlude sparingly: occluding ordinary nodes suppresses an ancestor's
+    /// `_hover` / `_active` wherever the occluding child sits on top of it.
+    pub(crate) fn should_occlude(&self) -> bool {
+        self.occlude.unwrap_or_else(|| self.is_overlay())
     }
 }
 
@@ -941,6 +959,34 @@ mod tests {
             priority: None,
         });
         assert!(props.is_overlay());
+    }
+
+    // ---- Props::should_occlude ----
+
+    #[test]
+    fn should_occlude_defaults_to_is_overlay() {
+        // No explicit prop: an ordinary node does not occlude, an overlay does.
+        assert!(!Props::default().should_occlude());
+        let mut overlay = Props::default();
+        overlay.style.position = Some("absolute".to_string());
+        assert!(overlay.should_occlude());
+    }
+
+    #[test]
+    fn should_occlude_explicit_true_on_in_flow_node() {
+        // An in-flow element can be forced to occlude (e.g. a dialog panel).
+        let mut props = Props::default();
+        props.occlude = Some(true);
+        assert!(props.should_occlude());
+    }
+
+    #[test]
+    fn should_occlude_explicit_false_overrides_overlay() {
+        // An absolute element can opt out of occlusion (e.g. a decorative scrim).
+        let mut props = Props::default();
+        props.style.position = Some("absolute".to_string());
+        props.occlude = Some(false);
+        assert!(!props.should_occlude());
     }
 
     // ---- apply_command — helpers (shared with sequence_tests below) ----

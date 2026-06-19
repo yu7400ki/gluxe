@@ -451,6 +451,7 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
             .and_then(crate::model::parse_window_control_area),
         anchor_name: obj_reader.str_val("anchorName", ctx),
         floating: parse_floating(obj, ctx),
+        occlude: obj_reader.bool_val("occlude", ctx),
         // Events are populated separately from the third bridge argument.
         ..Props::default()
     }
@@ -624,6 +625,29 @@ mod tests {
     fn no_focus_props_is_not_focusable() {
         let p = props_from_js("({ style: { width: 10 } })");
         assert!(!p.is_focusable());
+    }
+
+    // ---- occlude prop ----
+
+    #[test]
+    fn occlude_absent_is_none_and_follows_overlay_default() {
+        let p = props_from_js("({ style: { width: 10 } })");
+        assert_eq!(p.occlude, None);
+        assert!(!p.should_occlude());
+    }
+
+    #[test]
+    fn occlude_true_forces_occlusion_on_in_flow_node() {
+        let p = props_from_js("({ occlude: true })");
+        assert_eq!(p.occlude, Some(true));
+        assert!(p.should_occlude());
+    }
+
+    #[test]
+    fn occlude_false_opts_out_of_overlay_occlusion() {
+        let p = props_from_js("({ occlude: false, style: { position: 'absolute' } })");
+        assert_eq!(p.occlude, Some(false));
+        assert!(!p.should_occlude());
     }
 
     // ---- windowControlArea prop ----
