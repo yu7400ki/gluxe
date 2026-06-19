@@ -28,6 +28,7 @@ struct CompositeSeen {
     font_weight: bool,
     line_height: bool,
     font_features: bool,
+    font_family: bool,
 }
 
 /// Records composite-field presence; returns `true` so the caller can skip the simple-field path.
@@ -43,6 +44,7 @@ fn mark_composite(seen: &mut CompositeSeen, key: &str) -> bool {
         "fontWeight" => seen.font_weight = true,
         "lineHeight" => seen.line_height = true,
         "fontFeatures" => seen.font_features = true,
+        "fontFamily" => seen.font_family = true,
         _ => return false,
     }
     true
@@ -159,7 +161,6 @@ simple_style_fields![
     (border_style, "borderStyle", Str),
     (text_align, "textAlign", Str),
     (font_style, "fontStyle", Str),
-    (font_family, "fontFamily", Str),
     (text_decoration_line, "textDecorationLine", Str),
     (text_decoration_style, "textDecorationStyle", Str),
     // ---- Colors ----
@@ -227,6 +228,7 @@ fn parse_style_fields(objs: &[&JsObject], ctx: &mut JsContext) -> StyleFields {
         || seen.font_weight
         || seen.line_height
         || seen.font_features
+        || seen.font_family
     {
         let r = PropReader::new(objs.to_vec());
         if seen.flex {
@@ -267,6 +269,9 @@ fn parse_style_fields(objs: &[&JsObject], ctx: &mut JsContext) -> StyleFields {
         }
         if seen.font_features {
             fields.font_features = r.font_features(ctx);
+        }
+        if seen.font_family {
+            fields.font_family = r.font_family(ctx);
         }
     }
 
@@ -616,6 +621,74 @@ mod tests {
         let p = props_from_js("({ style: { transition: { duration: -5, delay: -3 } } })");
         assert_eq!(p.transitions[0].duration_ms, 0.0);
         assert_eq!(p.transitions[0].delay_ms, 0.0);
+    }
+
+    // ---- fontFamily parsing ----
+
+    #[test]
+    fn font_family_string_splits_on_commas_and_unquotes() {
+        let p = props_from_js(
+            "({ style: { fontFamily: \"Inter, 'Helvetica Neue', \\\"Segoe UI\\\", sans-serif\" } })",
+        );
+        assert_eq!(
+            p.style.font_family,
+            Some(vec![
+                "Inter".to_string(),
+                "Helvetica Neue".to_string(),
+                "Segoe UI".to_string(),
+                "sans-serif".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn font_family_array_is_one_token_per_element() {
+        // Commas inside an array element are NOT re-split.
+        let p = props_from_js("({ style: { fontFamily: ['Inter', 'Foo, Bar', 'monospace'] } })");
+        assert_eq!(
+            p.style.font_family,
+            Some(vec![
+                "Inter".to_string(),
+                "Foo, Bar".to_string(),
+                "monospace".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn font_family_drops_empty_tokens() {
+        // Trailing/leading commas and whitespace-only tokens are dropped.
+        let p = props_from_js("({ style: { fontFamily: 'Inter, , ,  , serif,' } })");
+        assert_eq!(
+            p.style.font_family,
+            Some(vec!["Inter".to_string(), "serif".to_string()])
+        );
+    }
+
+    #[test]
+    fn font_family_empty_or_non_string_is_none() {
+        assert_eq!(props_from_js("({ style: { fontFamily: '' } })").style.font_family, None);
+        assert_eq!(
+            props_from_js("({ style: { fontFamily: '  ,  ' } })").style.font_family,
+            None
+        );
+        assert_eq!(props_from_js("({ style: { fontFamily: [] } })").style.font_family, None);
+        assert_eq!(props_from_js("({ style: { fontFamily: 42 } })").style.font_family, None);
+    }
+
+    #[test]
+    fn font_family_single_token() {
+        let p = props_from_js("({ style: { fontFamily: 'monospace' } })");
+        assert_eq!(p.style.font_family, Some(vec!["monospace".to_string()]));
+    }
+
+    #[test]
+    fn font_family_merge_replaces_not_concats() {
+        // Higher-priority `style` list wins wholesale over the top-level list.
+        let p = props_from_js(
+            "({ fontFamily: ['Arial', 'serif'], style: { fontFamily: ['Inter'] } })",
+        );
+        assert_eq!(p.style.font_family, Some(vec!["Inter".to_string()]));
     }
 
     #[test]

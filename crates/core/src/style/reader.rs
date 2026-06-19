@@ -111,6 +111,52 @@ fn get_font_features(obj: &JsObject, ctx: &mut JsContext) -> Option<Vec<(String,
     }
 }
 
+/// Trim surrounding whitespace and a single layer of matching outer quotes
+/// (`'…'` or `"…"`) from one `font-family` token.
+fn clean_font_token(raw: &str) -> String {
+    let t = raw.trim();
+    let unquoted = if t.len() >= 2
+        && ((t.starts_with('"') && t.ends_with('"'))
+            || (t.starts_with('\'') && t.ends_with('\'')))
+    {
+        &t[1..t.len() - 1]
+    } else {
+        t
+    };
+    unquoted.trim().to_string()
+}
+
+/// Parse `fontFamily` into an ordered token list (primary first, then fallbacks).
+///
+/// - **String** — split on commas (CSS `font-family` syntax).
+/// - **Array** — one token per element; commas inside an element are *not* split.
+///
+/// Every token is trimmed and unquoted via [`clean_font_token`]; empty tokens are
+/// dropped. An all-empty (or non-string/array) value yields `None`.
+fn get_font_family(obj: &JsObject, ctx: &mut JsContext) -> Option<Vec<String>> {
+    let val = obj.get(js_string!("fontFamily"), ctx).ok()?;
+    let tokens: Vec<String> = if let Some(arr) = val.as_object().filter(|o| o.is_array()) {
+        js_array_values(&arr, ctx)
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(|s| clean_font_token(&s))
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else if let Some(s) = val.as_str() {
+        s.split(',')
+            .map(clean_font_token)
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        return None;
+    };
+    if tokens.is_empty() {
+        None
+    } else {
+        Some(tokens)
+    }
+}
+
 /// Returns `(flex_number, flex_keyword)` — at most one is `Some`.
 fn get_flex(obj: &JsObject, ctx: &mut JsContext) -> (Option<f32>, Option<String>) {
     let val = match obj.get(js_string!("flex"), ctx).ok() {
@@ -309,6 +355,10 @@ impl<'a> PropReader<'a> {
 
     pub(crate) fn font_features(&self, ctx: &mut JsContext) -> Option<Vec<(String, u32)>> {
         self.first(ctx, get_font_features)
+    }
+
+    pub(crate) fn font_family(&self, ctx: &mut JsContext) -> Option<Vec<String>> {
+        self.first(ctx, get_font_family)
     }
 
     pub(crate) fn flex(&self, ctx: &mut JsContext) -> (Option<f32>, Option<String>) {

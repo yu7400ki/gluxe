@@ -253,8 +253,11 @@ pub(crate) struct StyleFields {
     pub(crate) text_align: Option<String>,
     /// CSS `font-style`: `"normal"` | `"italic"`.
     pub(crate) font_style: Option<String>,
-    /// CSS `font-family`: a font family name string.
-    pub(crate) font_family: Option<String>,
+    /// CSS `font-family` as an ordered token list (primary first, then fallbacks).
+    /// Parsed from a string (CSS comma syntax) or an array (one token per element).
+    /// Merge semantics are replace-not-concat: a higher-priority source's list
+    /// wins wholesale (handled by the `PropReader::first` resolution in `parse.rs`).
+    pub(crate) font_family: Option<Vec<String>>,
     /// CSS `line-height`. A bare number becomes `relative(n)` (font-size multiplier).
     pub(crate) line_height: Option<DefiniteLength>,
     /// CSS `text-decoration-line`: `"none"` | `"underline"` | `"line-through"` | combined.
