@@ -306,6 +306,25 @@ macro_rules! attach_focus {
     }};
 }
 
+/// Attach the window-control region (if any) then the JS mouse-event handlers to a
+/// stateful host element — the interaction tail shared by the `Stateful<Div>` path
+/// (`build_div_with_pseudo!`) and the `Stateful<Img>` path. Macro-not-generic:
+/// `Stateful<Div>` and `Stateful<Img>` share no nameable bound, so the expansion
+/// binds to whichever `StatefulInteractiveElement` the call site holds. Focus is
+/// attached just *before* this in both paths (the Div path interleaves scroll
+/// setup between focus and these, so focus stays out of the bundle).
+macro_rules! attach_stateful_interactions {
+    ($stateful:expr, $eid:expr, $props:expr) => {{
+        let mut s = $stateful;
+        // Must come after `.id()`: the non-Windows Drag handler uses `on_click`,
+        // which requires a Stateful element.
+        if let Some(area) = $props.window_control_area {
+            s = attach_window_control!(s, area);
+        }
+        attach_events!(s, $eid, $props.events)
+    }};
+}
+
 /// Build a styled `Div` (or `Stateful<Div>` when needed) from `props`.
 ///
 /// Same macro-not-generic rationale as `attach_events!`. A `Stateful<Div>`
@@ -352,12 +371,7 @@ macro_rules! build_div_with_pseudo {
             if $props.style.scrolls() {
                 stateful = stateful.track_scroll(&scroll_handle(eid));
             }
-            // Must come after `.id()`: the non-Windows Drag handler uses `on_click`
-            // which requires Stateful.
-            if let Some(area) = $props.window_control_area {
-                stateful = attach_window_control!(stateful, area);
-            }
-            let stateful = attach_events!(stateful, eid, $props.events);
+            let stateful = attach_stateful_interactions!(stateful, eid, $props);
             stateful.children($children).into_any_element()
         } else {
             div.children($children).into_any_element()
@@ -527,10 +541,7 @@ impl Render for NodeView {
                         if element.props.is_focusable() {
                             stateful = attach_focus!(stateful, id, &element.props, window, cx);
                         }
-                        if let Some(area) = element.props.window_control_area {
-                            stateful = attach_window_control!(stateful, area);
-                        }
-                        let stateful = attach_events!(stateful, id, element.props.events);
+                        let stateful = attach_stateful_interactions!(stateful, id, element.props);
                         Some(stateful.into_any_element())
                     } else {
                         Some(image.into_any_element())
