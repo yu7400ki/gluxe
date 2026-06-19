@@ -1,0 +1,61 @@
+{
+  "name": "@gluxe/ui",
+  "version": "0.1.0",
+  "description": "Headless, unstyled UI components for gluxe apps — behavior and state, you bring the style.",
+  "keywords": [
+    "components",
+    "desktop",
+    "gluxe",
+    "headless",
+    "react",
+    "ui",
+    "unstyled"
+  ],
+  "homepage": "https://github.com/yu7400ki/gluxe#readme",
+  "bugs": "https://github.com/yu7400ki/gluxe/issues",
+  "license": "MIT",
+  "author": "Yuki Natori",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yu7400ki/gluxe.git",
+    "directory": "packages/ui"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "lint": "oxlint",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gluxe/react": "workspace:*"
+  },
+  "devDependencies": {
+    "@gluxe/config": "workspace:*",
+    "@types/node": "catalog:types",
+    "@types/react": "catalog:types",
+    "@types/react-dom": "catalog:types",
+    "jsdom": "catalog:test",
+    "oxlint": "catalog:lint",
+    "react": "catalog:prod",
+    "react-dom": "catalog:test",
+    "tsdown": "catalog:build",
+    "typescript": "catalog:build",
+    "vitest": "catalog:test"
+  },
+  "peerDependencies": {
+    "react": "^19.2.6"
+  }
+}

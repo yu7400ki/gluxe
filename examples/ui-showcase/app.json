@@ -1,0 +1,22 @@
+{
+  "name": "ui-showcase",
+  "window": {
+    "width": 760,
+    "height": 800,
+    "title": "Gluxe UI — Headless Components"
+  },
+  "bundle": {
+    "entry": "index.tsx",
+    "outDir": "dist",
+    "build": {
+      "command": "pnpm",
+      "args": ["build"]
+    }
+  },
+  "dev": {
+    "build": {
+      "command": "pnpm",
+      "args": ["dev"]
+    }
+  }
+}

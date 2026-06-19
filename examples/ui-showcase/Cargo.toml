@@ -1,0 +1,15 @@
+[package]
+name = "ui-showcase"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "ui-showcase"
+path = "src/main.rs"
+
+[dependencies]
+gluxe = { path = "../../crates/core" }
+
+[build-dependencies]
+gluxe-build = { path = "../../crates/build-support" }
