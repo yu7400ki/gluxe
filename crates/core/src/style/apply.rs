@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use gpui::{
     BorderStyle, BoxShadow, EdgesRefinement, FontFallbacks, FontFeatures, FontWeight, Overflow,
-    SharedString, StrikethroughStyle, Styled, UnderlineStyle, Visibility, point, px,
+    StrikethroughStyle, Styled, UnderlineStyle, Visibility, point, px,
 };
 
 use crate::style::fields::{BoxShadowSpec, LengthValue, OverflowMode, StyleFields};
+use crate::style::font_family::expand_chain;
 
 /// Apply `StyleFields` to any element that implements GPUI's `Styled` trait.
 ///
@@ -410,15 +411,18 @@ pub(crate) fn apply_style_props<T: Styled>(mut element: T, props: &StyleFields) 
         Some("normal") => element = element.not_italic(),
         _ => {}
     }
-    // Primary family + fallbacks via `font_family()` + `text_style().font_fallbacks`.
+    // Expand generic families to platform fonts, then apply the primary via
+    // `font_family()` and the rest via `text_style().font_fallbacks`.
     // Never `.font(Font { .. })`: that resets weight/style/features to defaults and
     // would clobber separately-applied `fontWeight`/`fontStyle`/`fontFeatures`.
-    if let Some(tokens) = &props.font_family
-        && let Some((first, rest)) = tokens.split_first()
-    {
-        element = element.font_family(SharedString::from(first.clone()));
-        if !rest.is_empty() {
-            element.text_style().font_fallbacks = Some(FontFallbacks::from_fonts(rest.to_vec()));
+    if let Some(tokens) = &props.font_family {
+        let chain = expand_chain(tokens);
+        if let Some((first, rest)) = chain.split_first() {
+            element = element.font_family(first.clone());
+            if !rest.is_empty() {
+                let fallbacks = rest.iter().map(|s| s.to_string()).collect();
+                element.text_style().font_fallbacks = Some(FontFallbacks::from_fonts(fallbacks));
+            }
         }
     }
     if let Some(lh) = props.line_height {
