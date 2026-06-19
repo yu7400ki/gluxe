@@ -405,4 +405,28 @@ describe("Tabs", () => {
       expect(onChange).not.toHaveBeenCalled();
     });
   });
+
+  it("the active Content panel is focusable by default (tabIndex 0) and can be overridden", () => {
+    function Panels({ tabIndex }: { tabIndex?: number }) {
+      return (
+        <Tabs defaultValue="one">
+          <Tabs.List>
+            <Tabs.Trigger value="one">
+              <Text>tab-one</Text>
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="one" tabIndex={tabIndex}>
+            <Text>panel-one</Text>
+          </Tabs.Content>
+        </Tabs>
+      );
+    }
+    // Default: the panel joins the Tab order so keyboard users can reach its body.
+    render(<Panels />);
+    expect(tabIndexOf("panel-one")).toBe("0");
+
+    // Override: tabIndex={-1} keeps the panel out of the Tab order.
+    render(<Panels tabIndex={-1} />);
+    expect(tabIndexOf("panel-one")).toBe("-1");
+  });
 });

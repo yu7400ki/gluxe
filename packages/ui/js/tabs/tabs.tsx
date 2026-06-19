@@ -199,12 +199,18 @@ export interface TabsContentProps extends Omit<ViewProps, "children"> {
  * The content panel shown when its `value` matches the active tab. Renders
  * nothing while its tab is inactive — the panel is unmounted, not hidden.
  *
+ * Focusable by default (`tabIndex={0}`) so keyboard users can Tab from the
+ * trigger list into the panel body even when it holds no focusable element.
+ * Only the active panel is mounted, so there is never more than one panel Tab
+ * stop. Pass `tabIndex={-1}` (or any explicit value) to override.
+ *
  * Passes `{ selected }` to render-function children (always `true` while
  * mounted, but available for API symmetry with other parts).
  */
 export function TabsContent({
   value: itemValue,
   children,
+  tabIndex = 0,
   ...viewProps
 }: TabsContentProps): React.ReactElement | null {
   const ctx = useTabsContext();
@@ -214,7 +220,11 @@ export function TabsContent({
     return null;
   }
 
-  return <View {...viewProps}>{renderSlot(children, { selected })}</View>;
+  return (
+    <View {...viewProps} tabIndex={tabIndex}>
+      {renderSlot(children, { selected })}
+    </View>
+  );
 }
 TabsContent.displayName = "Tabs.Content";
 
