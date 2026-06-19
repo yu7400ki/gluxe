@@ -116,8 +116,7 @@ fn get_font_features(obj: &JsObject, ctx: &mut JsContext) -> Option<Vec<(String,
 fn clean_font_token(raw: &str) -> String {
     let t = raw.trim();
     let unquoted = if t.len() >= 2
-        && ((t.starts_with('"') && t.ends_with('"'))
-            || (t.starts_with('\'') && t.ends_with('\'')))
+        && ((t.starts_with('"') && t.ends_with('"')) || (t.starts_with('\'') && t.ends_with('\'')))
     {
         &t[1..t.len() - 1]
     } else {

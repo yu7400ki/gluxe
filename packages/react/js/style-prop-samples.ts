@@ -97,7 +97,7 @@ export const STYLE_PROP_SAMPLES = {
   boxShadow: "md",
   textAlign: "center",
   fontStyle: "italic",
-  fontFamily: "monospace",
+  fontFamily: ["Inter", "sans-serif"],
   lineHeight: 1.5,
   textDecorationLine: "underline",
   textDecorationColor: "#0000ff",

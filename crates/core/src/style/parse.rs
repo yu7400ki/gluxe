@@ -667,13 +667,30 @@ mod tests {
 
     #[test]
     fn font_family_empty_or_non_string_is_none() {
-        assert_eq!(props_from_js("({ style: { fontFamily: '' } })").style.font_family, None);
         assert_eq!(
-            props_from_js("({ style: { fontFamily: '  ,  ' } })").style.font_family,
+            props_from_js("({ style: { fontFamily: '' } })")
+                .style
+                .font_family,
             None
         );
-        assert_eq!(props_from_js("({ style: { fontFamily: [] } })").style.font_family, None);
-        assert_eq!(props_from_js("({ style: { fontFamily: 42 } })").style.font_family, None);
+        assert_eq!(
+            props_from_js("({ style: { fontFamily: '  ,  ' } })")
+                .style
+                .font_family,
+            None
+        );
+        assert_eq!(
+            props_from_js("({ style: { fontFamily: [] } })")
+                .style
+                .font_family,
+            None
+        );
+        assert_eq!(
+            props_from_js("({ style: { fontFamily: 42 } })")
+                .style
+                .font_family,
+            None
+        );
     }
 
     #[test]
@@ -685,9 +702,8 @@ mod tests {
     #[test]
     fn font_family_merge_replaces_not_concats() {
         // Higher-priority `style` list wins wholesale over the top-level list.
-        let p = props_from_js(
-            "({ fontFamily: ['Arial', 'serif'], style: { fontFamily: ['Inter'] } })",
-        );
+        let p =
+            props_from_js("({ fontFamily: ['Arial', 'serif'], style: { fontFamily: ['Inter'] } })");
         assert_eq!(p.style.font_family, Some(vec!["Inter".to_string()]));
     }
 
