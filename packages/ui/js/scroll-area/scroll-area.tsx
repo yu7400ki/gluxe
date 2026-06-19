@@ -63,7 +63,7 @@ export function ScrollAreaViewport({
   ref,
   ...viewProps
 }: ScrollAreaViewportProps): React.ReactElement {
-  const ctx = useScrollAreaContext();
+  const { setViewportId } = useScrollAreaContext();
 
   // Stable ref callback: publish the host id on mount, clear it on unmount.
   // `instance` is the GpuiInstance (`{ id, focus, blur }`); guard for a numeric
@@ -71,12 +71,12 @@ export function ScrollAreaViewport({
   const setViewportRef = useCallback(
     (instance: GpuiInstance | null) => {
       if (instance && typeof instance.id === "number") {
-        ctx.setViewportId(instance.id);
+        setViewportId(instance.id);
       } else {
-        ctx.setViewportId(undefined);
+        setViewportId(undefined);
       }
     },
-    [ctx.setViewportId],
+    [setViewportId],
   );
 
   return (
