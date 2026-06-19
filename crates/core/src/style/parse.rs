@@ -4,7 +4,10 @@ use gpui::Rgba;
 use super::color::parse_color;
 use super::reader::{PropReader, length_from_value};
 use crate::anim::{Easing, TransitionProperty, TransitionSpec, field_id_from_name};
-use crate::model::{FloatingSpec, LengthValue, Props, StyleFields, parse_floating_area};
+use crate::model::Props;
+use crate::style::fields::{
+    FloatingSpec, LengthValue, StyleFields, parse_floating_area, parse_window_control_area,
+};
 
 // ---------------------------------------------------------------------------
 // Composite-field presence tracking
@@ -459,7 +462,7 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
         window_control_area: obj_reader
             .str_val("windowControlArea", ctx)
             .as_deref()
-            .and_then(crate::model::parse_window_control_area),
+            .and_then(parse_window_control_area),
         anchor_name: obj_reader.str_val("anchorName", ctx),
         floating: parse_floating(obj, ctx),
         occlude: obj_reader.bool_val("occlude", ctx),
@@ -471,7 +474,9 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{FloatingAlign, FloatingSide, FloatingSpec, LengthValue, OverflowMode};
+    use crate::style::fields::{
+        FloatingAlign, FloatingSide, FloatingSpec, LengthValue, OverflowMode,
+    };
 
     /// Evaluate a JS object-literal expression and run it through `parse_props`.
     fn props_from_js(src: &str) -> Props {

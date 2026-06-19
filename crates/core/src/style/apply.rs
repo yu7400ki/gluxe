@@ -5,7 +5,7 @@ use gpui::{
     StrikethroughStyle, Styled, UnderlineStyle, Visibility, point, px,
 };
 
-use crate::model::{BoxShadowSpec, LengthValue, OverflowMode, StyleFields};
+use crate::style::fields::{BoxShadowSpec, LengthValue, OverflowMode, StyleFields};
 
 /// Apply `StyleFields` to any element that implements GPUI's `Styled` trait.
 ///

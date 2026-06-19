@@ -1,6 +1,6 @@
 use gpui::{AbsoluteLength, DefiniteLength, Length, px, relative, rems};
 
-use crate::model::LengthValue;
+use crate::style::fields::LengthValue;
 
 /// Parse a CSS-style length string into a [`LengthValue`].
 ///
@@ -61,7 +61,7 @@ impl LengthValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::LengthValue;
+    use crate::style::fields::LengthValue;
 
     // ---- parse_length_str ----
 

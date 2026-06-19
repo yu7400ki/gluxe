@@ -1,3 +1,5 @@
+pub(crate) mod fields;
+
 mod apply;
 mod color;
 mod grid;

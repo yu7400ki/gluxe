@@ -4,7 +4,7 @@ use gpui::{DefiniteLength, GridPlacement, Rgba, px, relative, rems};
 use super::color::parse_color;
 use super::grid::parse_grid_shorthand;
 use super::length::parse_length_str;
-use crate::model::{BoxShadowSpec, LengthValue, OverflowMode, ShadowValue};
+use crate::style::fields::{BoxShadowSpec, LengthValue, OverflowMode, ShadowValue};
 
 fn get_f32(obj: &JsObject, key: &str, ctx: &mut JsContext) -> Option<f32> {
     obj.get(js_string!(key), ctx)
