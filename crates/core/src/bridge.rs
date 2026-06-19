@@ -193,12 +193,24 @@ pub(crate) fn register_bridge(ctx: &mut JsContext) -> boa_engine::JsResult<()> {
 
 /// Coerce positional arg `index` to a `u64` (JS numbers are f64). Shared by the
 /// reconciler element ids and the invoke/stream call ids.
+///
+/// Rejects non-finite (`NaN` / `±Inf`) and negative values instead of letting
+/// the `as u64` cast saturate them to `0` / `u64::MAX` — a malformed id from a
+/// buggy or hostile bundle becomes a JS `TypeError` here rather than a silent
+/// wrong-node mutation. Well-formed bundles only ever pass the monotonic
+/// positive counters this guard accepts.
 fn u64_arg(args: &[JsValue], index: usize, ctx: &mut JsContext) -> boa_engine::JsResult<u64> {
-    Ok(args
+    let n: f64 = args
         .get(index)
         .cloned()
         .unwrap_or_default()
-        .try_js_into::<f64>(ctx)? as u64)
+        .try_js_into(ctx)?;
+    if !n.is_finite() || n < 0.0 {
+        return Err(JsNativeError::typ()
+            .with_message(format!("bridge: argument {index} is not a valid id: {n}"))
+            .into());
+    }
+    Ok(n as u64)
 }
 
 /// Required string positional arg — propagates a JS TypeError when it can't coerce.
@@ -393,4 +405,40 @@ pub(crate) fn register_performance(ctx: &mut JsContext) -> boa_engine::JsResult<
     ctx.global_object()
         .set(js_string!("performance"), performance, false, ctx)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stack::eval_on_parser_stack;
+
+    fn fresh_ctx() -> JsContext {
+        JsContext::builder().build().expect("ctx")
+    }
+
+    #[test]
+    fn u64_arg_accepts_finite_non_negative() {
+        let mut ctx = fresh_ctx();
+        assert_eq!(
+            u64_arg(&[JsValue::from(42.0_f64)], 0, &mut ctx).unwrap(),
+            42
+        );
+        // Fractional values truncate toward zero, matching the f64 -> u64 cast.
+        assert_eq!(u64_arg(&[JsValue::from(7.9_f64)], 0, &mut ctx).unwrap(), 7);
+    }
+
+    #[test]
+    fn u64_arg_rejects_negative() {
+        let mut ctx = fresh_ctx();
+        assert!(u64_arg(&[JsValue::from(-1.0_f64)], 0, &mut ctx).is_err());
+    }
+
+    #[test]
+    fn u64_arg_rejects_non_finite() {
+        let mut ctx = fresh_ctx();
+        let inf = eval_on_parser_stack(&mut ctx, b"(1/0)").unwrap();
+        let nan = eval_on_parser_stack(&mut ctx, b"(0/0)").unwrap();
+        assert!(u64_arg(&[inf], 0, &mut ctx).is_err());
+        assert!(u64_arg(&[nan], 0, &mut ctx).is_err());
+    }
 }
