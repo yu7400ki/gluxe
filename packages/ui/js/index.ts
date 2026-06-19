@@ -7,6 +7,10 @@
 
 export type { Slot } from "./internal/slot";
 
+// ---- Portal ----
+export { Portal } from "./portal/portal";
+export type { PortalProps } from "./portal/portal";
+
 // ---- Button ----
 export { Button } from "./button/button";
 export type { ButtonProps } from "./button/button";
@@ -75,6 +79,26 @@ export type {
   TabsTriggerProps,
   TabsTriggerState,
 } from "./tabs/tabs";
+
+// ---- Select ----
+export {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemIndicator,
+  SelectTrigger,
+  SelectValue,
+} from "./select/select";
+export type {
+  SelectContentProps,
+  SelectItemIndicatorProps,
+  SelectItemProps,
+  SelectItemState,
+  SelectProps,
+  SelectState,
+  SelectTriggerProps,
+  SelectValueProps,
+} from "./select/select";
 
 // ---- ScrollArea ----
 export {

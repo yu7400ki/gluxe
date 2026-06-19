@@ -15,6 +15,7 @@ import { CheckboxSection } from "./components/sections/checkbox-section";
 import { DisclosureSection } from "./components/sections/disclosure-section";
 import { RadioGroupSection } from "./components/sections/radio-group-section";
 import { ScrollAreaSection } from "./components/sections/scroll-area-section";
+import { SelectSection } from "./components/sections/select-section";
 import { SwitchSection } from "./components/sections/switch-section";
 import { TabsSection } from "./components/sections/tabs-section";
 import { ToggleSection } from "./components/sections/toggle-section";
@@ -68,6 +69,7 @@ export default function App(): React.ReactElement {
           <CheckboxSection />
           <SwitchSection />
           <RadioGroupSection />
+          <SelectSection />
           <DisclosureSection />
           <AccordionSection />
           <TabsSection />
