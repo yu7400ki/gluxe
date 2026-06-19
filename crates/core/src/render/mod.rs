@@ -4,25 +4,23 @@ use std::{
 };
 
 use gpui::{
-    Anchor, AnyElement, App, Bounds, Context as GpuiContext, Element, Entity, GlobalElementId,
-    InspectorElementId, IntoElement, KeyDownEvent, LayoutId, MouseButton, Pixels, Point, Render,
-    Subscription, Window, WindowControlArea, anchored, deferred, div, img, point, prelude::*, px,
+    AnyElement, App, Context as GpuiContext, Entity, IntoElement, KeyDownEvent, MouseButton,
+    Render, Subscription, Window, WindowControlArea, div, img, prelude::*,
 };
 use rustc_hash::FxHashMap;
 use url::Url;
 
 use crate::{
     component::{self, NativeRenderContext},
-    model::{
-        ApplyOutcome, ElementId, ElementKind, Events, FloatingAlign, FloatingSide, FloatingSpec,
-        OverflowMode, Props, StyleFields,
-    },
+    model::{ApplyOutcome, ElementId, ElementKind, Events, OverflowMode, Props, StyleFields},
     state::{
         dispatch_key_event, dispatch_mouse_event, dispatch_simple_event, focus_handle,
         notify_text_input_entity, scroll_handle, text_input_entity, try_autofocus, with_tree,
     },
     style::apply_style_props,
 };
+
+mod anchor;
 
 // ---------------------------------------------------------------------------
 // Per-node renderer
@@ -37,13 +35,6 @@ thread_local! {
     /// Set when `start_window_move()` is actually called; prevents a drag-initiated
     /// click from also triggering the double-click zoom action.
     static WINDOW_MOVE_STARTED: Cell<bool> = Cell::new(false);
-    /// Maps each `anchorName` to its element id. Re-registered every render of the
-    /// anchor node; on duplicate names the last writer wins.
-    static ANCHOR_NAMES: RefCell<FxHashMap<String, ElementId>> = RefCell::new(FxHashMap::default());
-    /// Last painted window-space bounds of each anchor node, recorded by `Measured`
-    /// each prepaint and read (one frame later) by floating elements bound to it.
-    static ANCHOR_BOUNDS: RefCell<FxHashMap<ElementId, Bounds<Pixels>>> =
-        RefCell::new(FxHashMap::default());
     /// `onFocus`/`onBlur` subscriptions per element. Rebuilt when the handler set
     /// changes; dropped on `DetachDeleted` / dev reload.
     static FOCUS_SUBSCRIPTIONS: RefCell<FxHashMap<ElementId, FocusSubs>> =
@@ -404,8 +395,7 @@ pub(crate) fn clear_node_views() {
     NODE_VIEWS.with(|views| views.borrow_mut().clear());
     DRAG_SHOULD_MOVE.set(false);
     WINDOW_MOVE_STARTED.set(false);
-    ANCHOR_NAMES.with(|m| m.borrow_mut().clear());
-    ANCHOR_BOUNDS.with(|m| m.borrow_mut().clear());
+    anchor::clear();
 }
 
 fn render_child(id: ElementId, cx: &mut App) -> Option<AnyElement> {
@@ -432,163 +422,6 @@ fn is_text_input_node(id: ElementId) -> bool {
             .get(&id)
             .is_some_and(|element| matches!(&element.kind, ElementKind::TextInput))
     })
-}
-
-// ---------------------------------------------------------------------------
-// Anchor positioning
-// ---------------------------------------------------------------------------
-
-/// A layout-transparent wrapper that records its child's painted bounds into
-/// `ANCHOR_BOUNDS` each prepaint. Wraps any node declared with `anchorName` so
-/// floating elements bound to that name can position against it (read one frame
-/// later, like Zed's `PopoverMenu`). It forwards the child's `LayoutId` and paints
-/// only the child, contributing nothing of its own to layout or paint.
-struct Measured {
-    id: ElementId,
-    child: AnyElement,
-}
-
-impl Element for Measured {
-    type RequestLayoutState = ();
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, ()) {
-        (self.child.request_layout(window, cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _request_layout: &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        // Floating elements bound to this anchor read its bounds one frame late (at their
-        // own build time). When the bounds first appear or move, nudge a redraw so those
-        // elements re-render at the new position. Guarded by an actual change so a stable
-        // anchor never schedules a redraw (no repaint loop).
-        let changed =
-            ANCHOR_BOUNDS.with(|m| m.borrow_mut().insert(self.id, bounds) != Some(bounds));
-        if changed {
-            window.request_animation_frame();
-        }
-        self.child.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
-        _request_layout: &mut (),
-        _prepaint: &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        self.child.paint(window, cx);
-    }
-}
-
-impl IntoElement for Measured {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-/// Map a floating `side`/`align` to the (trigger-corner, floating-corner) pair:
-/// the floating element's `floating` corner is placed at the anchor's `attach` corner.
-fn floating_corners(side: FloatingSide, align: FloatingAlign) -> (Anchor, Anchor) {
-    use Anchor::{
-        BottomCenter, BottomLeft, BottomRight, LeftCenter, RightCenter, TopCenter, TopLeft,
-        TopRight,
-    };
-    use FloatingAlign::{Center, End, Start};
-    use FloatingSide::{Bottom, Left, Right, Top};
-    match (side, align) {
-        (Bottom, Start) => (BottomLeft, TopLeft),
-        (Bottom, Center) => (BottomCenter, TopCenter),
-        (Bottom, End) => (BottomRight, TopRight),
-        (Top, Start) => (TopLeft, BottomLeft),
-        (Top, Center) => (TopCenter, BottomCenter),
-        (Top, End) => (TopRight, BottomRight),
-        (Right, Start) => (TopRight, TopLeft),
-        (Right, Center) => (RightCenter, LeftCenter),
-        (Right, End) => (BottomRight, BottomLeft),
-        (Left, Start) => (TopLeft, TopRight),
-        (Left, Center) => (LeftCenter, RightCenter),
-        (Left, End) => (BottomLeft, BottomRight),
-    }
-}
-
-/// The gap vector applied along the `side` direction (pushes the floating element
-/// away from the anchor).
-fn side_offset(side: FloatingSide, offset: Pixels) -> Point<Pixels> {
-    match side {
-        FloatingSide::Top => point(px(0.0), -offset),
-        FloatingSide::Bottom => point(px(0.0), offset),
-        FloatingSide::Left => point(-offset, px(0.0)),
-        FloatingSide::Right => point(offset, px(0.0)),
-    }
-}
-
-/// Wrap a floating element in `deferred(anchored(...))`, positioned against the
-/// named anchor's last-recorded bounds. `anchored` measures the floating element's
-/// own size and snaps it inside the window on overflow; `deferred` lifts it above
-/// in-flow content and outside overflow clipping. Until the anchor has been measured
-/// (normally only the first frame, since the anchor pre-exists), it falls back to
-/// `anchored`'s natural placement.
-fn wrap_floating(spec: &FloatingSpec, rem_size: Pixels, child: AnyElement) -> AnyElement {
-    // `offset`/`margin` accept px/rem (resolved to absolute px here); `%`/`auto` are
-    // meaningless for a gap and fall back to 0.
-    let offset = spec
-        .offset
-        .to_absolute()
-        .map_or(px(0.0), |a| a.to_pixels(rem_size));
-    let margin = spec
-        .margin
-        .to_absolute()
-        .map_or(px(0.0), |a| a.to_pixels(rem_size));
-
-    let (attach, floating_anchor) = floating_corners(spec.side, spec.align);
-    let position = ANCHOR_NAMES
-        .with(|m| m.borrow().get(&spec.anchor).copied())
-        .and_then(|anchor_id| ANCHOR_BOUNDS.with(|m| m.borrow().get(&anchor_id).copied()))
-        .map(|bounds| bounds.corner(attach) + side_offset(spec.side, offset));
-
-    let mut anchored_el = anchored().anchor(floating_anchor);
-    if let Some(position) = position {
-        anchored_el = anchored_el.position(position);
-    }
-    // Always snap inside the window on overflow, keeping `margin` from the edge.
-    // We deliberately avoid anchored's `SwitchAnchor` (flip): it mirrors the floating
-    // corner about the position point without knowing the anchor's size, so it would
-    // overlap a sized anchor. `margin` 0 is equivalent to a plain `snap_to_window()`.
-    anchored_el = anchored_el.snap_to_window_with_margin(margin);
-    let anchored_el = anchored_el.child(child);
-
-    let mut deferred_el = deferred(anchored_el);
-    if let Some(priority) = spec.priority {
-        deferred_el = deferred_el.with_priority(priority as usize);
-    }
-    deferred_el.into_any_element()
 }
 
 pub(crate) struct NodeView {
@@ -746,24 +579,18 @@ impl Render for NodeView {
         // which arrives via UpdateProps, not node removal, so `removed_nodes` never
         // sees it — can't leave a stale name→id mapping or a frozen bounds entry
         // behind. The guard keeps ordinary (never-anchor) nodes off this path.
-        if element.props.anchor_name.is_some()
-            || ANCHOR_BOUNDS.with(|m| m.borrow().contains_key(&id))
-        {
-            ANCHOR_NAMES.with(|m| m.borrow_mut().retain(|_, &mut v| v != id));
+        if element.props.anchor_name.is_some() || anchor::has_bounds(id) {
+            anchor::clear_name_for(id);
             if let Some(name) = &element.props.anchor_name {
-                ANCHOR_NAMES.with(|m| {
-                    m.borrow_mut().insert(name.clone(), id);
-                });
-                el = Measured { id, child: el }.into_any_element();
+                anchor::register_name(name.clone(), id);
+                el = anchor::Measured { id, child: el }.into_any_element();
             } else {
                 // No longer an anchor: drop the frozen bounds so nothing reads them.
-                ANCHOR_BOUNDS.with(|m| {
-                    m.borrow_mut().remove(&id);
-                });
+                anchor::drop_bounds(id);
             }
         }
         if let Some(spec) = &element.props.floating {
-            el = wrap_floating(spec, window.rem_size(), el);
+            el = anchor::wrap_floating(spec, window.rem_size(), el);
         }
         el
     }
@@ -822,10 +649,7 @@ impl RootView {
         let mut root_dirty = outcome.root_dirty;
         for id in outcome.removed_nodes {
             remove_node_view(id);
-            ANCHOR_BOUNDS.with(|m| {
-                m.borrow_mut().remove(&id);
-            });
-            ANCHOR_NAMES.with(|m| m.borrow_mut().retain(|_, &mut v| v != id));
+            anchor::evict(id);
         }
         for id in outcome.dirty_nodes {
             if is_text_input_node(id) {
@@ -907,45 +731,7 @@ fn local_image_path(src: &str) -> PathBuf {
 mod tests {
     use std::path::PathBuf;
 
-    use gpui::{Anchor, point, px};
-
-    use super::{floating_corners, local_image_path, side_offset};
-    use crate::model::{FloatingAlign, FloatingSide};
-
-    #[test]
-    fn floating_corners_all_combinations() {
-        use Anchor::{
-            BottomCenter, BottomLeft, BottomRight, LeftCenter, RightCenter, TopCenter, TopLeft,
-            TopRight,
-        };
-        use FloatingAlign::{Center, End, Start};
-        use FloatingSide::{Bottom, Left, Right, Top};
-
-        // Characterization: exactly mirrors the current match arms.
-        assert_eq!(floating_corners(Bottom, Start), (BottomLeft, TopLeft));
-        assert_eq!(floating_corners(Bottom, Center), (BottomCenter, TopCenter));
-        assert_eq!(floating_corners(Bottom, End), (BottomRight, TopRight));
-        assert_eq!(floating_corners(Top, Start), (TopLeft, BottomLeft));
-        assert_eq!(floating_corners(Top, Center), (TopCenter, BottomCenter));
-        assert_eq!(floating_corners(Top, End), (TopRight, BottomRight));
-        assert_eq!(floating_corners(Right, Start), (TopRight, TopLeft));
-        assert_eq!(floating_corners(Right, Center), (RightCenter, LeftCenter));
-        assert_eq!(floating_corners(Right, End), (BottomRight, BottomLeft));
-        assert_eq!(floating_corners(Left, Start), (TopLeft, TopRight));
-        assert_eq!(floating_corners(Left, Center), (LeftCenter, RightCenter));
-        assert_eq!(floating_corners(Left, End), (BottomLeft, BottomRight));
-    }
-
-    #[test]
-    fn side_offset_axis_and_sign() {
-        let off = px(8.0);
-        // Top pushes up (negative y); Bottom pushes down (positive y).
-        assert_eq!(side_offset(FloatingSide::Top, off), point(px(0.0), -off));
-        assert_eq!(side_offset(FloatingSide::Bottom, off), point(px(0.0), off));
-        // Left pushes left (negative x); Right pushes right (positive x).
-        assert_eq!(side_offset(FloatingSide::Left, off), point(-off, px(0.0)));
-        assert_eq!(side_offset(FloatingSide::Right, off), point(off, px(0.0)));
-    }
+    use super::local_image_path;
 
     #[test]
     fn local_image_path_bare_path_passes_through() {
