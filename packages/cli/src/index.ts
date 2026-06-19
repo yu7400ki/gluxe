@@ -2,7 +2,9 @@
 import { cli, define } from "gunshi";
 
 import packageJson from "../package.json" with { type: "json" };
-import { buildProject, runProject, startProject, validateKnownOptions } from "./core.js";
+import { validateKnownOptions } from "./args.js";
+import { buildProject, runProject } from "./commands.js";
+import { startProject } from "./dev.js";
 
 const projectArgs = {
   project: {

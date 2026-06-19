@@ -4,17 +4,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  checkManifestReady,
-  createCargoCommand,
-  ensureCargoToml,
-  manifestMtime,
-  readBundleBuildConfig,
-  readBundleOutDir,
-  readDevBuildConfig,
-  validateKnownOptions,
-  waitForFirstBuild,
-} from "./core.js";
+import { validateKnownOptions } from "./args.js";
+import { readBundleBuildConfig, readBundleOutDir, readDevBuildConfig } from "./config.js";
+import { checkManifestReady, manifestMtime, waitForFirstBuild } from "./dev.js";
+import { createCargoCommand, ensureCargoToml } from "./project.js";
 
 describe("readBundleBuildConfig", () => {
   it("uses the default command when app.json is missing", async () => {
