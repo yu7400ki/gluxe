@@ -61,7 +61,7 @@ export function FocusScope({
       if (onUnmountAutoFocus) onUnmountAutoFocus(previouslyFocused);
       else if (previouslyFocused !== null) focusElement(previouslyFocused);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return <>{children}</>;

@@ -315,7 +315,7 @@ function SelectContentImpl({
   useEffect(() => {
     ctx.list.focusInitial(ctx.value);
     // Run once when the list mounts (i.e. opens).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
