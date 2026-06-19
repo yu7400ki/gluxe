@@ -1,5 +1,5 @@
 import { type GpuiKeyboardEvent, type GpuiMouseEvent, View, type ViewProps } from "@gluxe/react";
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 
 import { composeEventHandlers } from "../internal/compose";
 import { createSafeContext } from "../internal/context";
@@ -84,14 +84,13 @@ export function Tabs({
     onChange: onValueChange,
   });
 
-  // Automatic activation selects on focus; manual only moves focus (stable noop
-  // so the roving state doesn't churn its identity every render).
-  const noop = useCallback(() => {}, []);
+  // Automatic activation selects on focus; manual only moves focus (omit
+  // onNavigate so arrows navigate without selecting).
   const roving = useRovingFocus({
     orientation,
     loop,
     value,
-    onNavigate: activationMode === "automatic" ? setValue : noop,
+    onNavigate: activationMode === "automatic" ? setValue : undefined,
   });
 
   const context = useMemo<TabsContextValue>(

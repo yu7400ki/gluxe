@@ -74,8 +74,9 @@ export interface UseRovingFocusParams {
   /** The "current" value (e.g. the selected one) that seeds the Tab stop. */
   value: string | undefined;
   /** Called when arrow navigation lands on a value (group decides whether to
-   *  also select — RadioGroup selects, Tabs may defer in manual mode). */
-  onNavigate: (value: string) => void;
+   *  also select — RadioGroup selects). Omit for focus-only navigation, e.g.
+   *  Tabs in manual-activation mode where Space / Enter selects instead. */
+  onNavigate?: (value: string) => void;
 }
 
 export interface RovingFocus {
@@ -145,7 +146,7 @@ export function useRovingFocus({
       const next = items[target];
       setTabbable(next.value);
       next.focus();
-      onNavigate(next.value);
+      onNavigate?.(next.value);
     },
     [orientation, loop, onNavigate],
   );
