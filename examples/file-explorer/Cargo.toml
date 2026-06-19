@@ -14,3 +14,6 @@ gluxe-plugin-fs = { path = "../../plugins/fs" }
 
 [build-dependencies]
 gluxe-build = { path = "../../crates/build-support" }
+
+[lints]
+workspace = true

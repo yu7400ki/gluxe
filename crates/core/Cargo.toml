@@ -75,3 +75,6 @@ stacker = "0.1"
 # to the same type across the dependency graph (currently 0.25.x).
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
 image = { version = "0.25", default-features = false, features = ["ico"] }
+
+[lints]
+workspace = true

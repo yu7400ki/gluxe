@@ -15,3 +15,6 @@ serde_json = "1"
 
 [build-dependencies]
 gluxe-build = { path = "../../crates/build-support" }
+
+[lints]
+workspace = true

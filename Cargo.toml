@@ -12,3 +12,6 @@ authors = ["Yuki Natori"]
 license = "MIT"
 repository = "https://github.com/yu7400ki/gluxe"
 homepage = "https://github.com/yu7400ki/gluxe"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

@@ -13,3 +13,6 @@ categories = ["gui", "filesystem"]
 [dependencies]
 gluxe = { path = "../../crates/core" }
 serde_json = "1"
+
+[lints]
+workspace = true
