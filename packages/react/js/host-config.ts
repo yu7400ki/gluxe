@@ -7,22 +7,16 @@
 
 import { hostGlobal } from "./bridge-channel";
 import { invoke } from "./invoke";
-import type { GpuiFocusEvent, GpuiKeyboardEvent, GpuiMouseEvent } from "./primitives";
+import type { GpuiFocusEvent, GpuiInstance, GpuiKeyboardEvent, GpuiMouseEvent } from "./primitives";
 
 const DefaultEventPriority = 32; // React 19 lane value (was 16 in React 18)
 
 let currentUpdatePriority = 0;
 
-// Lightweight wrapper carrying the Rust-side ElementId. Exposed to React as the
-// `ref` value (via `getPublicInstance`), so `ref.current.focus()` works.
-interface Instance {
-  id: number;
-  /** Move keyboard focus to this element. No-op unless the element is focusable
-   *  (has `tabIndex`, `onKeyDown`, `onFocus`/`onBlur`, `autoFocus`, or `_focus*`). */
-  focus(): Promise<void>;
-  /** Remove keyboard focus from this element (only if it currently holds focus). */
-  blur(): Promise<void>;
-}
+// The reconciler instance for a host element is exactly the public ref value
+// (`ref.current`, see GpuiInstance): the Rust-side ElementId plus focus/blur.
+// Aliased so the rest of hostConfig keeps reading as `Instance`.
+type Instance = GpuiInstance;
 
 /** Build the public instance for an ElementId, wiring the focus/blur ref methods. */
 function makeInstance(id: number): Instance {
