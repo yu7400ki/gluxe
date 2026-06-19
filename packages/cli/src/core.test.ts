@@ -288,6 +288,14 @@ describe("validateKnownOptions", () => {
   it("rejects unsupported short options", () => {
     expect(() => validateKnownOptions(["build", "-x"])).toThrow("unexpected option '-x'");
   });
+
+  it("rejects --release on start (its schema has no release flag)", () => {
+    // Derived per-command from the gunshi schema: build/run accept --release, start does not.
+    expect(() => validateKnownOptions(["start", "--release"])).toThrow(
+      "unexpected option '--release'",
+    );
+    expect(() => validateKnownOptions(["build", "--release"])).not.toThrow();
+  });
 });
 
 describe("ProcessSupervisor", () => {

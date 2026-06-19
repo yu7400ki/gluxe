@@ -1,11 +1,36 @@
-// CLI argument validation: reject unknown options before gunshi parses them, so
-// a typo like `--no-js` fails loudly instead of being silently ignored.
+// CLI argument schemas + validation. The schemas are the single source of truth:
+// index.ts builds the gunshi commands from them, and validateKnownOptions derives
+// its per-command allowlist from them, so the parser and the validator can't drift.
 
-const commandOptions = {
-  build: new Set(["help", "project", "release", "version"]),
-  run: new Set(["help", "project", "release", "version"]),
-  start: new Set(["help", "project", "version"]),
+const projectArgs = {
+  project: {
+    type: "string",
+    default: ".",
+    description: "Root of the project",
+  },
+  release: {
+    type: "boolean",
+    description: "Build in release mode",
+  },
 } as const;
+
+const startArgs = {
+  project: {
+    type: "string",
+    default: ".",
+    description: "Root of the project",
+  },
+} as const;
+
+/** Per-command gunshi argument schemas, shared with index.ts. */
+export const commandArgs = {
+  build: projectArgs,
+  run: projectArgs,
+  start: startArgs,
+} as const;
+
+// gunshi adds these to every command; they are not part of the schemas above.
+const builtinFlags = ["help", "version"];
 
 export function validateKnownOptions(argv: readonly string[]): void {
   const command = argv.find((arg) => !arg.startsWith("-"));
@@ -13,7 +38,7 @@ export function validateKnownOptions(argv: readonly string[]): void {
     return;
   }
 
-  const allowed = commandOptions[command];
+  const allowed = new Set<string>([...Object.keys(commandArgs[command]), ...builtinFlags]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (!arg.startsWith("-")) {
@@ -44,6 +69,6 @@ export function validateKnownOptions(argv: readonly string[]): void {
   }
 }
 
-function isCliCommand(command: string | undefined): command is keyof typeof commandOptions {
-  return command === "build" || command === "run" || command === "start";
+function isCliCommand(command: string | undefined): command is keyof typeof commandArgs {
+  return command !== undefined && Object.hasOwn(commandArgs, command);
 }
