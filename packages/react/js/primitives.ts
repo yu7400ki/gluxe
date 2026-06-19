@@ -201,9 +201,20 @@ export interface ImageProps extends EventProps {
 export interface TextInputProps {
   value?: string;
   placeholder?: string;
+  /** Accept multiple lines. Enter inserts a newline; `Cmd`/`Ctrl`+`Enter` fires
+   *  {@link onSubmit}. The box grows with its content (soft-wrapping at its
+   *  width), bounded by {@link minRows} / {@link maxRows}. */
+  multiline?: boolean;
+  /** `multiline` only: minimum number of visible rows (the auto-grow floor).
+   *  Defaults to `1`. Ignored for single-line inputs. */
+  minRows?: number;
+  /** `multiline` only: maximum number of visible rows before the content
+   *  scrolls internally. Omit for unbounded growth. Ignored for single-line. */
+  maxRows?: number;
   /** Called with the new text on every keystroke (React Native-style). */
   onChangeText?: TextChangeHandler;
-  /** Called with the current text when Enter is pressed. */
+  /** Called with the current text on submit: `Enter` for single-line inputs,
+   *  `Cmd`/`Ctrl`+`Enter` when `multiline`. */
   onSubmit?: TextChangeHandler;
   onFocus?: (e: GpuiFocusEvent) => void;
   onBlur?: (e: GpuiFocusEvent) => void;

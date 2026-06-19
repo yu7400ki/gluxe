@@ -862,7 +862,7 @@ impl Render for RootView {
                 this.navigate_tab(true, window, cx);
             }))
             .size_full()
-            .flex()
+            .grid()
             .items_start()
             .justify_start()
             .children(root_children)

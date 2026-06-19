@@ -323,6 +323,12 @@ pub(crate) struct Props {
     pub(crate) src: Option<String>,         // for Image elements
     pub(crate) value: Option<String>,       // for TextInput elements (controlled value)
     pub(crate) placeholder: Option<String>, // for TextInput elements
+    /// `<TextInput multiline>`: accept newlines and grow vertically. `false` →
+    /// single-line (newlines stripped on paste, Enter submits).
+    pub(crate) multiline: bool,
+    /// `multiline` auto-grow floor / cap in rows. `None` → 1 / unbounded.
+    pub(crate) min_rows: Option<u32>,
+    pub(crate) max_rows: Option<u32>,
     /// Element receives keyboard focus on first render. Implies `track_focus` even
     /// when no `onKeyDown` handler is registered.
     pub(crate) autofocus: bool,
@@ -1212,7 +1218,13 @@ mod tests {
                 },
             );
             apply_command(&mut tree, make_tabbable_instance(2, Some(0))); // ...with a focusable child
-            apply_command(&mut tree, UICommand::AppendChild { parent: 1, child: 2 });
+            apply_command(
+                &mut tree,
+                UICommand::AppendChild {
+                    parent: 1,
+                    child: 2,
+                },
+            );
             // Both the hidden container and its subtree are out of the Tab order.
             assert!(tree.focusable_descendants(1).is_empty(), "{hide}");
         }

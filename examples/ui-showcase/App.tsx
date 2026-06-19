@@ -5,9 +5,9 @@
 // lives in components/sections/ and reads component state through
 // render-function children to drive its styling.
 
-import { Text, View } from "@gluxe/react";
+import { Text, TextInput, View } from "@gluxe/react";
 import { ScrollArea } from "@gluxe/ui";
-import type React from "react";
+import React, { useState } from "react";
 
 import { AccordionSection } from "./components/sections/accordion-section";
 import { ButtonSection } from "./components/sections/button-section";
@@ -21,6 +21,88 @@ import { SwitchSection } from "./components/sections/switch-section";
 import { TabsSection } from "./components/sections/tabs-section";
 import { ToggleSection } from "./components/sections/toggle-section";
 import { theme } from "./components/theme";
+import { Label, Section } from "./components/ui-kit";
+
+// A multi-line TextInput demo. TextInput is a @gluxe/react primitive (not a
+// headless @gluxe/ui part), but it follows the same "the example supplies every
+// style" rule, so it earns a card alongside the rest of the gallery. The shared
+// field styling lives in one place so the three variants only differ by their
+// auto-grow bounds.
+const fieldStyle = {
+  width: "100%" as const,
+  paddingX: 12,
+  paddingY: 9,
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: theme.borderHigh,
+  backgroundColor: theme.surfaceHigh,
+  color: theme.text,
+  fontSize: 14,
+  lineHeight: 1.5,
+  caretColor: theme.accent,
+  selectionColor: "rgba(110, 168, 254, 0.3)",
+  _focusVisible: { borderColor: theme.accent },
+};
+
+function TextInputSection(): React.ReactElement {
+  const [note, setNote] = useState("");
+  const [bio, setBio] = useState("");
+  const [log, setLog] = useState("");
+  const [submitted, setSubmitted] = useState<string | null>(null);
+
+  return (
+    <Section
+      title="TextInput (multi-line)"
+      description="A multi-line text field. Enter inserts a newline and the box grows with its content, soft-wrapping at its width; minRows sets a taller floor and maxRows caps the height so the rest scrolls internally. Press Cmd/Ctrl+Enter to submit. Every input here is controlled via useState + onChangeText."
+    >
+      <View style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <Label>Auto-growing — starts at one row, grows as you add lines</Label>
+        <TextInput
+          multiline
+          value={note}
+          onChangeText={setNote}
+          onSubmit={setSubmitted}
+          placeholder="Write a note… (Cmd/Ctrl+Enter to submit)"
+          style={fieldStyle}
+        />
+      </View>
+
+      <View style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <Label>minRows={3} — opens taller, still grows past three lines</Label>
+        <TextInput
+          multiline
+          minRows={3}
+          value={bio}
+          onChangeText={setBio}
+          onSubmit={setSubmitted}
+          placeholder="A short bio…"
+          style={fieldStyle}
+        />
+      </View>
+
+      <View style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <Label>maxRows={5} — grows to five rows, then scrolls inside</Label>
+        <TextInput
+          multiline
+          maxRows={5}
+          value={log}
+          onChangeText={setLog}
+          onSubmit={setSubmitted}
+          placeholder="Paste a long log and watch it cap at five rows…"
+          style={fieldStyle}
+        />
+      </View>
+
+      <Text style={{ color: theme.textMuted, fontSize: 13, lineHeight: 1.5 }}>
+        {submitted === null
+          ? "Nothing submitted yet — press Cmd/Ctrl+Enter in any field above."
+          : submitted.trim() === ""
+            ? "Submitted an empty value."
+            : `Submitted: ${submitted}`}
+      </Text>
+    </Section>
+  );
+}
 
 export default function App(): React.ReactElement {
   return (
@@ -39,9 +121,7 @@ export default function App(): React.ReactElement {
         style={{
           height: "100%",
           width: "100%",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
+          display: "grid",
         }}
       >
         <View
@@ -53,6 +133,7 @@ export default function App(): React.ReactElement {
             padding: 28,
             width: "100%",
             maxWidth: 680,
+            marginX: "auto",
           }}
         >
           <View style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
@@ -71,6 +152,7 @@ export default function App(): React.ReactElement {
           <SwitchSection />
           <RadioGroupSection />
           <SelectSection />
+          <TextInputSection />
           <DialogSection />
           <DisclosureSection />
           <AccordionSection />

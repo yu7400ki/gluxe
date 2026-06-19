@@ -86,8 +86,8 @@ use crate::{
         take_window_commands, wake_receiver,
     },
     text_input::{
-        Backspace, Copy as CopyAction, Cut, Delete, End, Enter, Home, Left, Paste, Right,
-        SelectAll, SelectLeft, SelectRight, ShowCharacterPalette,
+        Backspace, Copy as CopyAction, Cut, Delete, Down, End, Enter, Home, Left, Paste, Right,
+        SelectAll, SelectDown, SelectLeft, SelectRight, SelectUp, ShowCharacterPalette, Submit, Up,
     },
 };
 
@@ -468,7 +468,14 @@ pub fn run(source: BundleSource, options: RuntimeOptions) {
                 KeyBinding::new("cmd-a", SelectAll, Some("TextInput")),
                 KeyBinding::new("home", Home, Some("TextInput")),
                 KeyBinding::new("end", End, Some("TextInput")),
+                KeyBinding::new("up", Up, Some("TextInput")),
+                KeyBinding::new("down", Down, Some("TextInput")),
+                KeyBinding::new("shift-up", SelectUp, Some("TextInput")),
+                KeyBinding::new("shift-down", SelectDown, Some("TextInput")),
                 KeyBinding::new("enter", Enter, Some("TextInput")),
+                // Multiline submit (Enter inserts a newline when `multiline`).
+                KeyBinding::new("cmd-enter", Submit, Some("TextInput")),
+                KeyBinding::new("ctrl-enter", Submit, Some("TextInput")),
                 KeyBinding::new("ctrl-c", CopyAction, Some("TextInput")),
                 KeyBinding::new("cmd-c", CopyAction, Some("TextInput")),
                 KeyBinding::new("ctrl-v", Paste, Some("TextInput")),

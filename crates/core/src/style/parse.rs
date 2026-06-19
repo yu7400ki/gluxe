@@ -444,6 +444,16 @@ pub(crate) fn parse_props(obj: &JsObject, ctx: &mut JsContext) -> Props {
         src: obj_reader.str_val("src", ctx),
         value: obj_reader.str_val("value", ctx),
         placeholder: obj_reader.str_val("placeholder", ctx),
+        multiline: obj_reader.bool_val("multiline", ctx).unwrap_or(false),
+        // Rows must be positive; non-positive values are ignored (fall back to defaults).
+        min_rows: obj_reader
+            .i32_val("minRows", ctx)
+            .filter(|n| *n >= 1)
+            .map(|n| n as u32),
+        max_rows: obj_reader
+            .i32_val("maxRows", ctx)
+            .filter(|n| *n >= 1)
+            .map(|n| n as u32),
         autofocus: obj_reader.bool_val("autoFocus", ctx).unwrap_or(false),
         window_control_area: obj_reader
             .str_val("windowControlArea", ctx)
@@ -474,6 +484,23 @@ mod tests {
     fn style_overrides_top_level() {
         let p = props_from_js("({ width: 5, style: { width: 10 } })");
         assert_eq!(p.style.width, Some(LengthValue::Px(10.0)));
+    }
+
+    #[test]
+    fn multiline_props_parse() {
+        let p = props_from_js("({ multiline: true, minRows: 3, maxRows: 8 })");
+        assert!(p.multiline);
+        assert_eq!(p.min_rows, Some(3));
+        assert_eq!(p.max_rows, Some(8));
+    }
+
+    #[test]
+    fn multiline_defaults_and_nonpositive_rows_ignored() {
+        // multiline defaults to false; rows < 1 fall back to the engine defaults.
+        let p = props_from_js("({ minRows: 0, maxRows: -2 })");
+        assert!(!p.multiline);
+        assert_eq!(p.min_rows, None);
+        assert_eq!(p.max_rows, None);
     }
 
     #[test]
