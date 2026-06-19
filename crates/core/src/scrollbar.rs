@@ -266,7 +266,6 @@ fn apply_offset_from_pointer(
     set_handle_offset(handle, axis, new);
 }
 
-#[allow(clippy::too_many_arguments)]
 fn scrollbar_canvas(
     target: ElementId,
     axis: Axis,
