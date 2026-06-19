@@ -71,6 +71,16 @@ pub(crate) fn clear_focus_subscriptions() {
     FOCUS_SUBSCRIPTIONS.with(|subs| subs.borrow_mut().clear());
 }
 
+/// Register this module's node-lifecycle cleanup with the lifecycle seam.
+pub(crate) fn register_lifecycle() {
+    crate::lifecycle::on_detach(drop_focus_subscriptions);
+    #[cfg(debug_assertions)]
+    {
+        crate::lifecycle::on_reload(clear_focus_subscriptions);
+        crate::lifecycle::on_reload(clear_node_views);
+    }
+}
+
 /// Attach JS event listeners to any `Stateful<T>` (`T: StatefulInteractiveElement`).
 ///
 /// A macro rather than a generic helper because `Stateful<Div>` and `Stateful<Img>`
@@ -396,7 +406,6 @@ pub(crate) fn clear_node_views() {
     WINDOW_MOVE_STARTED.set(false);
     ANCHOR_NAMES.with(|m| m.borrow_mut().clear());
     ANCHOR_BOUNDS.with(|m| m.borrow_mut().clear());
-    crate::scrollbar::clear_scrollbar_drag();
 }
 
 fn render_child(id: ElementId, cx: &mut App) -> Option<AnyElement> {

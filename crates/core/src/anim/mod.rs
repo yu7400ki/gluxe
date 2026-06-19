@@ -229,6 +229,13 @@ pub(crate) fn clear() {
     ACTIVE.with(|a| a.borrow_mut().clear());
 }
 
+/// Register this module's node-lifecycle cleanup with the lifecycle seam.
+pub(crate) fn register_lifecycle() {
+    crate::lifecycle::on_detach(remove_node);
+    #[cfg(debug_assertions)]
+    crate::lifecycle::on_reload(clear);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

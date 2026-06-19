@@ -145,6 +145,13 @@ pub(crate) fn clear_scrollbar_drag() {
     SCROLLBAR_DRAG.with(|m| m.borrow_mut().clear());
 }
 
+/// Register this module's node-lifecycle cleanup with the lifecycle seam.
+pub(crate) fn register_lifecycle() {
+    crate::lifecycle::on_detach(clear_scrollbar_drag_for);
+    #[cfg(debug_assertions)]
+    crate::lifecycle::on_reload(clear_scrollbar_drag);
+}
+
 // ---------------------------------------------------------------------------
 // Element construction (registered render fn)
 // ---------------------------------------------------------------------------

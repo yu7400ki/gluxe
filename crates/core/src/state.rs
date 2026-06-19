@@ -507,6 +507,36 @@ pub(crate) fn push_cmd(cmd: UICommand) {
     COMMAND_QUEUE.with(|queue| queue.borrow_mut().push_back(cmd));
 }
 
+/// Drop state-owned per-element registries for a destroyed node `id`. The
+/// cross-module cleanup (scrollbar/render/anim) runs via `lifecycle::detach_node`.
+fn release_element(id: ElementId) {
+    // Release the ScrollHandle, TextInput entity, and FocusHandle so the
+    // Rc-chains are fully dropped and we don't accumulate stale handles.
+    SCROLL_HANDLES.with(|h| {
+        h.borrow_mut().remove(&id);
+    });
+    TEXT_INPUTS.with(|i| {
+        i.borrow_mut().remove(&id);
+    });
+    FOCUS_HANDLES.with(|h| {
+        h.borrow_mut().remove(&id);
+    });
+    AUTO_FOCUSED.with(|s| {
+        s.borrow_mut().remove(&id);
+    });
+    // Drop a stale Tab resume-anchor / active-element pointing at the removed
+    // element (recomputed next render, but clear now so a query between detach
+    // and the next paint can't return a dead id).
+    if FOCUS_ANCHOR.with(|c| c.get()) == Some(id) {
+        FOCUS_ANCHOR.with(|c| c.set(None));
+    }
+    if ACTIVE_ELEMENT.with(|c| c.get()) == Some(id) {
+        ACTIVE_ELEMENT.with(|c| c.set(None));
+    }
+    // Defensive: drop a Tab scope whose root was detached without unmount cleanup.
+    pop_tab_scope(id);
+}
+
 /// Flush COMMAND_QUEUE → TREE; returns changed render targets when anything visible changed.
 pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
     let cmds: Vec<UICommand> = COMMAND_QUEUE.with(|queue| queue.borrow_mut().drain(..).collect());
@@ -519,39 +549,11 @@ pub(crate) fn flush_commands() -> Option<ApplyOutcome> {
         let mut tree = tree.borrow_mut();
         let mut outcome = ApplyOutcome::default();
         for cmd in cmds {
-            // When a node is destroyed, release its ScrollHandle, TextInput
-            // entity, and FocusHandle so the Rc-chains are fully dropped and we
-            // don't accumulate stale handles.
+            // When a node is destroyed, release its state-owned registries and
+            // fire the per-node detach hooks (scrollbar/render/anim self-register).
             if let UICommand::DetachDeleted { id } = &cmd {
-                SCROLL_HANDLES.with(|handles| {
-                    handles.borrow_mut().remove(id);
-                });
-                // A scrollbar targeting this node may have a drag in progress;
-                // drop it so a stale grab can't outlive the node (its id reuse).
-                crate::scrollbar::clear_scrollbar_drag_for(*id);
-                TEXT_INPUTS.with(|inputs| {
-                    inputs.borrow_mut().remove(id);
-                });
-                FOCUS_HANDLES.with(|handles| {
-                    handles.borrow_mut().remove(id);
-                });
-                AUTO_FOCUSED.with(|set| {
-                    set.borrow_mut().remove(id);
-                });
-                // Drop a stale Tab resume-anchor / active-element pointing at the
-                // removed element (both are recomputed next render, but clear now so
-                // a query between detach and the next paint can't return a dead id).
-                if FOCUS_ANCHOR.with(|c| c.get()) == Some(*id) {
-                    FOCUS_ANCHOR.with(|c| c.set(None));
-                }
-                if ACTIVE_ELEMENT.with(|c| c.get()) == Some(*id) {
-                    ACTIVE_ELEMENT.with(|c| c.set(None));
-                }
-                // Defensive: drop a Tab scope whose root was detached without its
-                // unmount cleanup running.
-                pop_tab_scope(*id);
-                crate::render::drop_focus_subscriptions(*id);
-                crate::anim::remove_node(*id);
+                release_element(*id);
+                crate::lifecycle::detach_node(*id);
             }
             // Start/replace/cancel style transitions before `apply_command`
             // swaps the props in (it needs the old style to diff against).
@@ -678,7 +680,6 @@ pub(crate) fn reset_for_reload() {
     FOCUS_ANCHOR.with(|c| c.set(None));
     ACTIVE_ELEMENT.with(|c| c.set(None));
     TAB_SCOPE_STACK.with(|s| s.borrow_mut().clear());
-    crate::render::clear_focus_subscriptions();
     ARMED_DEADLINE.with(|a| a.set(None));
     // Ask any still-running stream handlers (from the old bundle) to wind down:
     // their sinks poll `is_closed()`. Then drop the flags.
@@ -693,8 +694,9 @@ pub(crate) fn reset_for_reload() {
     // `End` from their sink's `Drop`) are filtered out in `resolve_pending_streams`
     // instead of landing on a reused stream id in the fresh JS context.
     STREAM_EPOCH.fetch_add(1, Ordering::Relaxed);
-    crate::render::clear_node_views();
-    crate::anim::clear();
+    // Fire each owning module's reload hook (render/anim/scrollbar self-register
+    // their dev-reload cleanup with the lifecycle seam).
+    crate::lifecycle::reload();
 }
 
 /// Run `f` with exclusive access to the live Boa context.

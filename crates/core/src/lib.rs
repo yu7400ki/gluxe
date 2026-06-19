@@ -21,6 +21,7 @@ mod component;
 #[cfg(debug_assertions)]
 mod dev;
 mod jobs;
+mod lifecycle;
 mod macro_support;
 mod model;
 mod plugin;
@@ -719,6 +720,8 @@ pub(crate) fn create_js_context() -> Result<JsContext, String> {
     bridge::register_raf(&mut js_ctx).map_err(|e| format!("raf registration failed: {e}"))?;
     bridge::register_performance(&mut js_ctx)
         .map_err(|e| format!("performance registration failed: {e}"))?;
+
+    crate::lifecycle::install();
 
     Ok(js_ctx)
 }
