@@ -87,6 +87,90 @@ export type AccordionProps = AccordionSingleProps | AccordionMultipleProps;
 // Accordion (root)
 // ---------------------------------------------------------------------------
 
+/** The open-state channel an Accordion mode exposes through the shared context. */
+interface AccordionMode {
+  isOpen: (itemValue: string) => boolean;
+  toggle: (itemValue: string) => void;
+}
+
+/**
+ * Single-mode state: at most one item open. `collapsible` lets a click close the
+ * open item. Always called (hook order must be stable); when the accordion is in
+ * multiple mode `props.type !== "single"`, so the controllable state idles.
+ *
+ * Narrowing `props` by `type` before reading `value` / `onValueChange` types them
+ * as the single-mode shape (`string`) — no union casts.
+ */
+function useSingleAccordion(props: AccordionProps): AccordionMode {
+  const single = props.type === "single" ? props : undefined;
+  const [value, setValue] = useControllableState<string>({
+    prop: single?.value,
+    defaultProp: single?.defaultValue,
+    onChange: single?.onValueChange,
+  });
+  const collapsible = single?.collapsible ?? false;
+
+  const isOpen = useCallback((itemValue: string) => value === itemValue, [value]);
+  const toggle = useCallback(
+    (itemValue: string) => {
+      if (value === itemValue) {
+        // Already open — only close if collapsible. "" is the none-open sentinel;
+        // isOpen's strict equality never matches a real item value.
+        if (collapsible) {
+          setValue("");
+        }
+      } else {
+        setValue(itemValue);
+      }
+    },
+    [value, collapsible, setValue],
+  );
+  return { isOpen, toggle };
+}
+
+/**
+ * Multiple-mode state: any number of items open. Always called; idles when the
+ * accordion is in single mode. Narrowing by `type` types `value` as `string[]`.
+ */
+function useMultipleAccordion(props: AccordionProps): AccordionMode {
+  const multiple = props.type === "multiple" ? props : undefined;
+  const [value = [], setValue] = useControllableState<string[]>({
+    prop: multiple?.value,
+    defaultProp: multiple?.defaultValue,
+    onChange: multiple?.onValueChange,
+  });
+
+  const isOpen = useCallback((itemValue: string) => value.includes(itemValue), [value]);
+  const toggle = useCallback(
+    (itemValue: string) => {
+      if (value.includes(itemValue)) {
+        setValue(value.filter((v) => v !== itemValue));
+      } else {
+        setValue([...value, itemValue]);
+      }
+    },
+    [value, setValue],
+  );
+  return { isOpen, toggle };
+}
+
+// Strip every Accordion control prop so only genuine `<View>` props reach the
+// host element — leaking `value` / `onValueChange` / etc. would forward them
+// natively. `collapsible` is single-mode only, so it is named via a single cast.
+function accordionViewProps(props: AccordionProps): Omit<ViewProps, "children"> {
+  const {
+    type: _type,
+    disabled: _disabled,
+    value: _value,
+    defaultValue: _defaultValue,
+    onValueChange: _onValueChange,
+    children: _children,
+    collapsible: _collapsible,
+    ...viewProps
+  } = props as AccordionSingleProps;
+  return viewProps;
+}
+
 /**
  * Expandable list of items. Each child should be an {@link AccordionItem}.
  *
@@ -97,71 +181,13 @@ export type AccordionProps = AccordionSingleProps | AccordionMultipleProps;
  * open-state shape; pass `collapsible` to allow closing the active single item.
  */
 export function Accordion(props: AccordionProps): React.ReactElement {
-  // `type`, `value`, `defaultValue`, `onValueChange` exist on both union members
-  // so they destructure without a cast. `collapsible` is single-mode only, so it
-  // lands in `rest` and is stripped separately (a tiny cast). Pulling every
-  // control prop out keeps `viewProps` to genuine `<View>` props — leaking
-  // `value`/`onValueChange`/etc. would forward them to the native element.
-  const { type, disabled = false, children, value, defaultValue, onValueChange, ...rest } = props;
-  const { collapsible: collapsibleProp = false, ...viewProps } = rest as {
-    collapsible?: boolean;
-  } & Omit<ViewProps, "children">;
+  // Both mode hooks always run (stable hook order); `type` picks the active one.
+  // Each narrows `props` internally, so there are no discriminated-union casts.
+  const single = useSingleAccordion(props);
+  const multiple = useMultipleAccordion(props);
+  const { isOpen, toggle } = props.type === "single" ? single : multiple;
 
-  // --- single-mode controllable state (always called — hooks must be stable) ---
-  const [singleValue, setSingleValue] = useControllableState<string>({
-    prop: type === "single" ? (value as string | undefined) : undefined,
-    defaultProp: type === "single" ? (defaultValue as string | undefined) : undefined,
-    onChange: type === "single" ? (onValueChange as ((v: string) => void) | undefined) : undefined,
-  });
-
-  // --- multiple-mode controllable state (always called) ---------------------
-  const [multipleValue = [], setMultipleValue] = useControllableState<string[]>({
-    prop: type === "multiple" ? (value as unknown as string[] | undefined) : undefined,
-    defaultProp:
-      type === "multiple" ? (defaultValue as unknown as string[] | undefined) : undefined,
-    onChange:
-      type === "multiple"
-        ? (onValueChange as unknown as ((v: string[]) => void) | undefined)
-        : undefined,
-  });
-
-  // --- derive isOpen / toggle per mode -------------------------------------
-  const collapsible = type === "single" ? collapsibleProp : false;
-
-  const isOpen = useCallback(
-    (itemValue: string): boolean => {
-      if (type === "single") {
-        return singleValue === itemValue;
-      }
-      return multipleValue.includes(itemValue);
-    },
-    [type, singleValue, multipleValue],
-  );
-
-  const toggle = useCallback(
-    (itemValue: string): void => {
-      if (type === "single") {
-        if (singleValue === itemValue) {
-          // Already open — only close if collapsible.
-          if (collapsible) {
-            // Use "" as the "none open" sentinel; isOpen checks strict equality
-            // so an empty string never matches a real item value.
-            setSingleValue("");
-          }
-        } else {
-          setSingleValue(itemValue);
-        }
-      } else {
-        if (multipleValue.includes(itemValue)) {
-          setMultipleValue(multipleValue.filter((v) => v !== itemValue));
-        } else {
-          setMultipleValue([...multipleValue, itemValue]);
-        }
-      }
-    },
-    [type, singleValue, collapsible, setSingleValue, multipleValue, setMultipleValue],
-  );
-
+  const disabled = props.disabled ?? false;
   const ctx = useMemo<AccordionContextValue>(
     () => ({ isOpen, toggle, disabled }),
     [isOpen, toggle, disabled],
@@ -169,7 +195,7 @@ export function Accordion(props: AccordionProps): React.ReactElement {
 
   return (
     <AccordionContextProvider value={ctx}>
-      <View {...viewProps}>{children}</View>
+      <View {...accordionViewProps(props)}>{props.children}</View>
     </AccordionContextProvider>
   );
 }
