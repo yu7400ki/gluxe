@@ -288,8 +288,21 @@ export interface BaseStyleProps {
   // ---- Text styling ----
   textAlign?: "left" | "center" | "right";
   fontStyle?: "normal" | "italic";
-  /** `".SystemUIFont"` selects the platform UI font. */
-  fontFamily?: string;
+  /**
+   * Font family with fallbacks.
+   *
+   * - **String** — parsed as CSS `font-family` comma syntax: split on commas,
+   *   each token is trimmed and unquoted (outer `'…'`/`"…"` removed), empty
+   *   tokens dropped. e.g. `"Inter, 'Helvetica Neue', sans-serif"`.
+   * - **Array** — each element is exactly one family token (no comma re-splitting),
+   *   e.g. `["Inter", "Helvetica Neue", "sans-serif"]`.
+   *
+   * Generic families `"sans-serif"`, `"serif"`, `"monospace"`, and `"system-ui"`
+   * expand to platform-appropriate concrete fonts. The first resolved name becomes
+   * the primary family; the rest become fallbacks (used per-glyph when the primary
+   * lacks coverage).
+   */
+  fontFamily?: string | string[];
   /** Bare number = font-size multiplier (e.g. `1.5` = 1.5× fontSize). Also accepts px/rem/%. */
   lineHeight?: number | Px | Rem | Percent;
   /** Combine with a space for both: `"underline line-through"`. */
